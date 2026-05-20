@@ -16,7 +16,7 @@
 
 [官网](https://always200.com) | [在线优化器](https://prompt.always200.com) | [提示词库](https://garden.always200.com) | [文档站](https://docs.always200.com) | [快速开始](#快速开始) | [Chrome插件](https://chromewebstore.google.com/detail/prompt-optimizer/cakkkhboolfnadechdlgdcnjammejlna) | [💖赞助支持](images/other/sponsor_wx.jpg)
 
-[开发文档](dev.md) | [Vercel部署指南](docs/user/deployment/vercel.md) | [MCP部署使用说明](docs/user/mcp-server.md) | [DeepWiki文档](https://deepwiki.com/linshenkx/prompt-optimizer) | [ZRead文档](https://zread.ai/linshenkx/prompt-optimizer)
+[开发文档](docs/developer/development.md) | [Vercel部署指南](docs/user/deployment/vercel.md) | [Cloudflare Pages部署指南](docs/user/deployment/cloudflare-pages.md) | [MCP部署使用说明](docs/user/mcp-server.md) | [DeepWiki文档](https://deepwiki.com/linshenkx/prompt-optimizer) | [ZRead文档](https://zread.ai/linshenkx/prompt-optimizer)
 
 </div>
 
@@ -91,7 +91,9 @@ Prompt Optimizer是一个强大的AI提示词优化工具，帮助你编写更�
 
 项目是纯前端项目，所有数据只存储在浏览器本地，不会上传至任何服务器，因此直接使用在线版本也是安全可靠的
 
-### 2. Vercel部署
+### 2. Web部署
+
+#### Vercel部署
 方式1：一键部署到自己的Vercel(方便，但后续无法自动更新)：
    [![部署到 Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Flinshenkx%2Fprompt-optimizer)
 
@@ -105,6 +107,13 @@ Prompt Optimizer是一个强大的AI提示词优化工具，帮助你编写更�
 
 更多详细的部署步骤和注意事项，请查看：
 - [Vercel部署指南](docs/user/deployment/vercel.md)
+- [Cloudflare Pages部署指南](docs/user/deployment/cloudflare-pages.md)
+
+#### Cloudflare Pages部署
+
+Fork 项目后在 Cloudflare Pages 中导入自己的 fork。保持仓库根目录，构建产物目录设置为 `packages/web/dist`，后续同步 fork 后会自动重新部署。
+
+Cloudflare 上的访问控制和访问分析建议分别使用 Cloudflare Access 和 Cloudflare Web Analytics，在 Cloudflare 控制台配置即可，不需要安装前端依赖或修改应用代码。
 
 ### 3. 下载桌面应用
 从 [GitHub Releases](https://github.com/linshenkx/prompt-optimizer/releases) 下载最新版本。我们为各平台提供**安装程序**和**压缩包**两种格式。
@@ -151,15 +160,16 @@ docker run -d -p 8081:80 \
 git clone https://github.com/linshenkx/prompt-optimizer.git
 cd prompt-optimizer
 
-# 2. 可选：创建.env文件配置API密钥和访问认证
+# 2. 创建 .env 文件配置 API 密钥和访问认证
 cp env.local.example .env
 # 编辑 .env 文件，填入实际的 API 密钥和配置
+# docker-compose.yml 位于 docker/ 目录下，所以后续命令显式传入根目录 .env
 
 # 3. 启动服务
-docker compose up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 # 4. 查看日志
-docker compose logs -f
+docker compose --env-file .env -f docker/docker-compose.yml logs -f
 
 # 5. 访问服务
 Web 界面：http://localhost:8081
@@ -167,9 +177,9 @@ MCP 服务器：http://localhost:8081/mcp
 ```
 </details>
 
-你还可以直接编辑docker-compose.yml文件，自定义配置：
+你还可以直接编辑 docker/docker-compose.yml 文件，自定义配置：
 <details>
-<summary>点击查看 docker-compose.yml 示例</summary>
+<summary>点击查看 docker/docker-compose.yml 示例</summary>
 
 ```yaml
 services:
@@ -304,7 +314,7 @@ Docker部署时通过 `-e` 参数配置环境变量：
 </details>
 
 ## 本地开发
-详细文档可查看 [开发文档](dev.md)
+详细文档可查看 [开发文档](docs/developer/development.md)
 
 <details>
 <summary>点击查看本地开发命令</summary>
@@ -348,6 +358,7 @@ pnpm dev:fresh        # 完整重置并重新启动开发环境
 - [项目状态](docs/project/project-status.md) - 当前进度和计划
 - [产品需求](docs/project/prd.md) - 产品需求文档
 - [Vercel部署指南](docs/user/deployment/vercel.md) - Vercel部署详细说明
+- [Cloudflare Pages部署指南](docs/user/deployment/cloudflare-pages.md) - 在 Cloudflare Pages 上部署 Web 前端
 
 
 ## Star History

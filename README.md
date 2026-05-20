@@ -16,7 +16,7 @@
 
 [Website](https://always200.com) | [Online Optimizer](https://prompt.always200.com) | [Prompt Garden](https://garden.always200.com) | [Docs](https://docs.always200.com) | [Quick Start](#quick-start) | [Chrome Extension](https://chromewebstore.google.com/detail/prompt-optimizer/cakkkhboolfnadechdlgdcnjammejlna) | [💖 Support](https://ko-fi.com/linshenkx)
 
-[Development Docs](dev.md) | [Vercel Deployment Guide](docs/user/deployment/vercel_en.md) | [MCP Deployment Guide](docs/user/mcp-server_en.md) | [DeepWiki Docs](https://deepwiki.com/linshenkx/prompt-optimizer) | [ZRead Docs](https://zread.ai/linshenkx/prompt-optimizer)
+[Development Docs](docs/developer/development.md) | [Vercel Deployment Guide](docs/user/deployment/vercel_en.md) | [Cloudflare Pages Deployment Guide](docs/user/deployment/cloudflare-pages_en.md) | [MCP Deployment Guide](docs/user/mcp-server_en.md) | [DeepWiki Docs](https://deepwiki.com/linshenkx/prompt-optimizer) | [ZRead Docs](https://zread.ai/linshenkx/prompt-optimizer)
 
 </div>
 
@@ -91,7 +91,9 @@ Direct access: [https://prompt.always200.com](https://prompt.always200.com)
 
 This is a pure frontend project with all data stored locally in your browser and never uploaded to any server, making the online version both safe and reliable to use.
 
-### 2. Vercel Deployment
+### 2. Web Deployment
+
+#### Vercel Deployment
 Method 1: One-click deployment to your own Vercel:
    [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Flinshenkx%2Fprompt-optimizer)
 
@@ -102,9 +104,16 @@ Method 2: Fork the project and import to Vercel (Recommended):
 - Configure environment variables:
   - `ACCESS_PASSWORD`: Set access password to enable access restriction
   - `VITE_OPENAI_API_KEY` etc.: Configure API keys for various AI service providers
-  
+
 For more detailed deployment steps and important notes, please check:
 - [Vercel Deployment Guide](docs/user/deployment/vercel_en.md)
+- [Cloudflare Pages Deployment Guide](docs/user/deployment/cloudflare-pages_en.md)
+
+#### Cloudflare Pages Deployment
+
+Fork the project and import your fork into Cloudflare Pages. Use the repository root, set the build output directory to `packages/web/dist`, and sync your fork later to trigger automatic redeploys.
+
+For access control and analytics on Cloudflare, configure Cloudflare Access and Cloudflare Web Analytics in the Cloudflare dashboard. No frontend dependency or application-code change is required.
 
 ### 3. Download Desktop Application
 Download the latest version from [GitHub Releases](https://github.com/linshenkx/prompt-optimizer/releases). We provide both **installer** and **archive** formats for each platform.
@@ -147,7 +156,7 @@ docker run -d -p 8081:80 \
 git clone https://github.com/linshenkx/prompt-optimizer.git
 cd prompt-optimizer
 
-# 2. Optional: Create .env file for API keys and authentication
+# 2. Create .env file for API keys and authentication
 cat > .env << EOF
 # API Key Configuration
 VITE_OPENAI_API_KEY=your_openai_api_key
@@ -162,11 +171,13 @@ ACCESS_USERNAME=your_username  # Optional, defaults to "admin"
 ACCESS_PASSWORD=your_password  # Set access password
 EOF
 
+# Because the compose file is under docker/, pass the root .env explicitly.
+
 # 3. Start the service
-docker compose up -d
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 
 # 4. View logs
-docker compose logs -f
+docker compose --env-file .env -f docker/docker-compose.yml logs -f
 
 # 5. Access the service
 Web Interface: http://localhost:8081
@@ -174,9 +185,9 @@ MCP Server: http://localhost:8081/mcp
 ```
 </details>
 
-You can also directly edit the docker-compose.yml file to customize your configuration:
+You can also directly edit the docker/docker-compose.yml file to customize your configuration:
 <details>
-<summary>Click to view docker-compose.yml example</summary>
+<summary>Click to view docker/docker-compose.yml example</summary>
 
 ```yaml
 services:
@@ -308,7 +319,7 @@ Configure environment variables through the `-e` parameter when deploying with D
 </details>
 
 ## Local Development
-For detailed documentation, see [Development Documentation](dev.md)
+For detailed documentation, see [Development Documentation](docs/developer/development.md)
 
 <details>
 <summary>Click to view local development commands</summary>
@@ -353,6 +364,7 @@ For detailed project status, see [Project Status Document](docs/project/project-
 - [Project Status](docs/project/project-status.md) - Current progress and plans
 - [Product Requirements](docs/project/prd.md) - Product requirements document
 - [Vercel Deployment Guide](docs/user/deployment/vercel_en.md) - Detailed instructions for Vercel deployment
+- [Cloudflare Pages Deployment Guide](docs/user/deployment/cloudflare-pages_en.md) - Web frontend deployment on Cloudflare Pages
 
 ## Star History
 
