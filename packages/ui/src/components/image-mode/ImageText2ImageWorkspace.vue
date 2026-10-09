@@ -1139,6 +1139,7 @@ const {
     generateText2Image,
     validateText2ImageRequest,
     loadImageModels,
+    isImageModelListReady,
 } = useImageGeneration()
 
 // 服务引用
@@ -1518,8 +1519,8 @@ const versionOptions = computed(() => {
 watch(
     () => imageModelOptions.value,
     (opts) => {
+        if (!isImageModelListReady.value) return
         const fallback = opts?.[0]?.value || ''
-        if (!fallback) return
         const keys = new Set((opts || []).map((o) => o.value))
 
         const legacy = session.selectedImageModelKey
@@ -1752,12 +1753,7 @@ const evaluationHandler = useEvaluationHandler({
             return modelKey
         }
 
-        return (
-            functionModelManager.evaluationModel.value ||
-            selectedTextModelKey.value ||
-            functionModelManager.effectiveEvaluationModel.value ||
-            ''
-        )
+        return functionModelManager.resolveEvaluationModelKey(selectedTextModelKey.value)
     },
     functionMode: computed(() => 'image'),
     subMode: computed(() => 'text2image'),
@@ -2753,6 +2749,7 @@ const refreshImageModels = async () => {
         }))
 
         if (!imageModels.value.length) {
+            if (isImageModelListReady.value) selectedImageModelKey.value = ''
             return
         }
 
