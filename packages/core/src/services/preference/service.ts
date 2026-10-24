@@ -1,4 +1,4 @@
-import type { IPreferenceService } from "./types";
+import type { IPreferenceService, PreferenceReadSnapshot } from "./types";
 import type { IStorageProvider } from "../storage/types";
 import { ImportExportError } from "../../interfaces/import-export";
 import { IMPORT_EXPORT_ERROR_CODES } from "../../constants/error-codes";
@@ -7,7 +7,7 @@ import { toErrorWithCode } from "../../utils/error";
 import { FUNCTION_MODEL_KEYS } from "../../constants/storage-keys";
 
 const SESSION_KEY_PREFIX = "session/";
-const MAX_SESSION_SNAPSHOT_BYTES = 1024 * 1024;
+export const MAX_SESSION_SNAPSHOT_BYTES = 1024 * 1024;
 
 type SessionStorageOperation = "read" | "write";
 type PreferenceStorageOperation = SessionStorageOperation | "delete";
@@ -122,9 +122,63 @@ export class PreferenceService implements IPreferenceService {
   private readonly PREFIX = "pref:";
   private keyCache: Set<string> = new Set();
   private storageProvider: IStorageProvider;
+  readonly compareAndSet?: IPreferenceService['compareAndSet'];
+  readonly readSnapshot?: IPreferenceService['readSnapshot'];
 
   constructor(storageProvider: IStorageProvider) {
     this.storageProvider = storageProvider;
+    if (storageProvider.compareAndSetItem) {
+      this.readSnapshot = async <T>(key: string, defaultValue: T): Promise<PreferenceReadSnapshot<T>> => {
+        assertValidPreferenceKey(key, 'read');
+        const prefKey = this.getPrefKey(key);
+        // Keep the original bytes private: reserializing decoded JSON would not
+        // match formatted legacy values, and oversized values cannot be decoded.
+        let storedValue = await storageProvider.getItem(prefKey);
+        let result: PreferenceReadSnapshot<T>['result'];
+        try {
+          result = { ok: true, value: this.decodePreferenceValue(key, storedValue, defaultValue) };
+        } catch (error) {
+          result = {
+            ok: false,
+            // JSON.parse errors can quote private payloads. Expose only the
+            // structured size error or a payload-free decoding failure.
+            error: error instanceof StorageError ? error : new StorageError(
+              'Failed to decode preference snapshot', 'read', { reason: 'invalid_preference_json' },
+            ),
+          };
+        }
+        let canRemove = storedValue !== null;
+        return {
+          result,
+          removeIfUnchanged: async () => {
+            if (!canRemove) return false;
+            canRemove = false;
+            const expected = storedValue;
+            storedValue = null;
+            const removed = await storageProvider.compareAndSetItem!(prefKey, expected, null);
+            if (removed) this.keyCache.delete(key);
+            return removed;
+          },
+        };
+      };
+      this.compareAndSet = async <T>(key: string, expected: unknown, value: T | null) => {
+        assertValidPreferenceKey(key, 'write');
+        const serialized = value === null ? null : JSON.stringify(value);
+        if (serialized !== null) assertSessionSnapshotSize(key, serialized, 'write');
+        let matched = await storageProvider.compareAndSetItem!(
+          this.getPrefKey(key), expected == null ? null : JSON.stringify(expected), serialized,
+        );
+        // Legacy preference writers could persist JSON null instead of removing a key.
+        if (!matched && expected == null) {
+          matched = await storageProvider.compareAndSetItem!(this.getPrefKey(key), 'null', serialized);
+        }
+        if (matched) {
+          if (value === null) this.keyCache.delete(key);
+          else this.keyCache.add(key);
+        }
+        return matched;
+      };
+    }
   }
 
   /**
@@ -139,13 +193,7 @@ export class PreferenceService implements IPreferenceService {
       const prefKey = this.getPrefKey(key);
       const storedValue = await this.storageProvider.getItem(prefKey);
 
-      if (storedValue === null) {
-        return defaultValue;
-      }
-      assertSessionSnapshotSize(key, storedValue, "read");
-      // 将键添加到缓存中
-      this.keyCache.add(key);
-      return JSON.parse(storedValue) as T;
+      return this.decodePreferenceValue(key, storedValue, defaultValue);
     } catch (error) {
       console.error(
         `[PreferenceService] Error getting preference for key "${key}":`,
@@ -157,6 +205,13 @@ export class PreferenceService implements IPreferenceService {
       const details = error instanceof Error ? error.message : String(error);
       throw new StorageError(`Failed to get preference: ${details}`, "read");
     }
+  }
+
+  private decodePreferenceValue<T>(key: string, storedValue: string | null, defaultValue: T): T {
+    if (storedValue === null) return defaultValue;
+    assertSessionSnapshotSize(key, storedValue, 'read');
+    this.keyCache.add(key);
+    return JSON.parse(storedValue) as T;
   }
 
   /**
@@ -287,7 +342,11 @@ export class PreferenceService implements IPreferenceService {
    */
   async exportData(): Promise<Record<string, string>> {
     try {
-      return await this.getAll();
+      // Session snapshots have their own structured DataManager section. They must
+      // not be exported as "[object Object]" UI settings or bypass its whitelist.
+      return Object.fromEntries(
+        Object.entries(await this.getAll()).filter(([key]) => !key.startsWith(SESSION_KEY_PREFIX)),
+      );
     } catch (error) {
       throw new ImportExportError(
         "Failed to export preference data",

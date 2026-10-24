@@ -1,43 +1,40 @@
 <template>
-    <div class="image-image2image-workspace" data-testid="workspace" data-mode="image-image2image">
+    <div :class="{ 'compact-two-region': isCompact }" class="image-image2image-workspace" data-testid="workspace" data-mode="image-image2image">
         <div class="workspace-page-tools">
-            <WorkspaceUtilityMenu
+            <Teleport defer to="#compact-workspace-tools" :disabled="!isCompact"><WorkspaceUtilityMenu :compact="isCompact"
                 :disabled="isOptimizing || isIterating || isAnyVariantRunning"
                 :source="resolveSourceAssetRef(session.origin, session.assetBinding)"
                 test-id="image-image2image-workspace-utility-menu"
                 @clear="handleClearContent"
-            />
+            /></Teleport>
         </div>
         <div
             ref="splitRootRef"
-            class="image-image2image-split"
-            :style="{ gridTemplateColumns: `${mainSplitLeftPct}% 12px 1fr` }"
+            class="image-image2image-split compact-workspace-pane"
+            :style="{ gridTemplateColumns: isCompact ? 'minmax(0, 1fr)' : `${mainSplitLeftPct}% 12px 1fr` }"
         >
             <!-- 左侧：提示词优化区域（文本模型） -->
-            <div class="split-pane" style="min-width: 0; height: 100%; overflow: hidden;">
-                <NFlex
-                    vertical
-                    :style="{ overflow: 'auto', height: '100%', minHeight: 0 }"
-                    size="medium"
-                >
+            <div v-show="!isCompact || mobileRegion === 'optimize'" :class="{ 'compact-optimize-region': isCompact }" class="split-pane" style="min-width: 0; height: 100%; overflow: hidden;">
+                <OptimizeWorkspaceLayout ref="optimizeLayoutRef" :compact="isCompact" @scroll="rememberOptimizeScroll">
+    <template #original>
             <!-- 输入控制区域 - 对齐InputPanel布局 -->
-            <TestSourceLinkedCard
+            <TestSourceLinkedCard class="compact-original-card"
                 :style="{ flexShrink: 0 }"
                 :feedback-key="sourceAreaFeedback.original.key"
                 :feedback-tone="sourceAreaFeedback.original.tone"
                 :source-tone="sourceAreaFeedback.original.sourceTone"
             >
                 <!-- 折叠态：只显示标题栏 -->
-                <NFlex
-                    v-if="isInputPanelCollapsed"
+                <NFlex class="source-summary-heading"
+                    v-if="sourceCollapsed"
                     justify="space-between"
                     align="center"
                 >
-                    <NFlex align="center" :size="8">
-                        <NText :depth="1" style="font-size: 18px; font-weight: 500">
+                    <NFlex class="source-summary-group" align="center" :size="8">
+                        <NText class="source-summary-title" :depth="1" style="font-size: 18px; font-weight: 500">
                             {{ t('imageWorkspace.input.originalPrompt') }}
                         </NText>
-                        <NText
+                        <NText class="source-summary-text"
                             v-if="originalPrompt"
                             depth="3"
                             style="font-size: 12px;"
@@ -45,7 +42,7 @@
                             {{ promptSummary }}
                         </NText>
                     </NFlex>
-                    <NFlex align="center" :size="8">
+                    <NFlex class="source-summary-group" align="center" :size="8">
                         <PromptGardenInspirationPopover
                             mode="image-image2image"
                             :has-prompt="!!originalPrompt.trim()"
@@ -59,7 +56,7 @@
                             size="small"
                             ghost
                             round
-                            @click="isInputPanelCollapsed = false"
+                            @click="isInputPanelCollapsed = false; compactAutoFolded = false"
                             :title="t('common.expand')"
                         >
                             <template #icon>
@@ -74,17 +71,17 @@
                 </NFlex>
 
                 <!-- 展开态：完整输入面板 -->
-                <NSpace v-else vertical :size="16">
+                <div v-show="!sourceCollapsed" class="workspace-input-panel"><NSpace class="input-panel-stack" vertical :size="16">
                     <!-- 标题区域 -->
-                    <NFlex justify="space-between" align="center" :wrap="false">
-                        <NText
+                    <NFlex class="input-panel-heading" justify="space-between" align="center" :wrap="false">
+                        <NText class="input-panel-title"
                             :depth="1"
                             style="font-size: 18px; font-weight: 500"
                             >{{
                                 t("imageWorkspace.input.originalPrompt")
                             }}</NText
                         >
-                        <NFlex align="center" :size="8">
+                        <NFlex class="input-panel-heading-group" align="center" :size="8">
                             <PromptGardenInspirationPopover
                                 mode="image-image2image"
                                 :has-prompt="!!originalPrompt.trim()"
@@ -147,7 +144,7 @@
                         @update:model-value="handleOriginalPromptInput"
                         :readonly="isOptimizing"
                         :placeholder="t('imageWorkspace.input.originalPromptPlaceholder')"
-                        :autosize="{ minRows: 4, maxRows: 12 }"
+                        :autosize="isCompact ? { minRows: 2, maxRows: compactInputRows } : { minRows: 4, maxRows: 12 }"
                         v-bind="variableInputData"
                         clearable
                         show-count
@@ -163,7 +160,7 @@
                             t('imageWorkspace.input.originalPromptPlaceholder')
                         "
                         :rows="4"
-                        :autosize="{ minRows: 4, maxRows: 12 }"
+                        :autosize="isCompact ? { minRows: 2, maxRows: compactInputRows } : { minRows: 4, maxRows: 12 }"
                         clearable
                         show-count
                         :disabled="isOptimizing"
@@ -171,6 +168,7 @@
 
                     <!-- 图片上传区域 - Image2Image 模式始终显示 -->
                     <NSpace
+                        class="image-reference-row"
                         vertical
                         :size="8"
                     >
@@ -216,30 +214,31 @@
                             <NButton
                                 v-if="previewImageUrl"
                                 @click="clearUploadedImage"
+                                :aria-label="t('common.delete')"
                                 :disabled="isOptimizing"
                                 size="medium"
                                 type="error"
                                 secondary
                             >
-                                ❌
+                                {{ isCompact ? '×' : '❌' }}
                             </NButton>
                         </NFlex>
                     </NSpace>
 
                     <!-- 控制面板 - 使用网格布局 -->
-                    <NGrid :cols="24" :x-gap="8" responsive="screen">
+                    <NGrid class="image-input-controls" :cols="24" :x-gap="8" responsive="screen">
                         <!-- 文本模型选择 -->
-                        <NGridItem :span="7" :xs="24" :sm="7">
-                            <NSpace vertical :size="8">
+                        <NGridItem class="image-input-control" :span="7" :xs="24" :sm="7">
+                            <NSpace item-class="image-input-field-item" vertical :size="8">
                                 <NFlex align="center" :size="6" :wrap="false">
-                                    <NText
+                                    <NText class="image-input-label"
                                         :depth="2"
                                         style="font-size: 14px; font-weight: 500; flex-shrink: 0;"
                                         >{{
                                             t("imageWorkspace.input.textModel")
                                         }}</NText
                                     >
-                                    <TextModelQuickSwitch
+                                    <TextModelQuickSwitch v-if="!isCompact"
                                         :model-key="selectedTextModelKey"
                                         :options="textModelOptions"
                                         :refresh-models="modelSelection.refreshTextModels"
@@ -299,9 +298,9 @@
                         </NGridItem>
 
                         <!-- 优化模板选择 -->
-                        <NGridItem :span="11" :xs="24" :sm="11">
-                            <NSpace vertical :size="8">
-                                <NText
+                        <NGridItem class="image-input-control" :span="11" :xs="24" :sm="11">
+                            <NSpace item-class="image-input-field-item" vertical :size="8">
+                                <NText class="image-input-label"
                                     :depth="2"
                                     style="font-size: 14px; font-weight: 500"
                                     >{{
@@ -341,7 +340,7 @@
                                         "
                                     />
                                 </template>
-                                <NText
+                                <NText class="image-input-label"
                                     v-else
                                     depth="3"
                                     style="padding: 0; font-size: 14px"
@@ -352,9 +351,9 @@
                         </NGridItem>
 
                         <!-- 优化按钮 -->
-                        <NGridItem :span="6" :xs="24" :sm="6" class="flex items-end justify-end">
-                            <NSpace :size="8">
-                                <NButton
+                        <NGridItem :span="6" :xs="24" :sm="6" class="image-input-control image-input-submit flex items-end justify-end">
+                            <NSpace class="image-input-submit-actions" item-class="image-input-submit-item" :size="8">
+                                <NButton v-if="!isCompact"
                                     type="default"
                                     size="medium"
                                     data-testid="image-image2image-analyze-button"
@@ -376,6 +375,7 @@
                                     type="primary"
                                     size="medium"
                                     data-testid="image-image2image-optimize-button"
+                                    :aria-label="isCompact ? t('promptOptimizer.optimize') : undefined"
                                     :loading="isOptimizing"
                                     @click="handleOptimizePrompt"
                                     :disabled="
@@ -388,7 +388,7 @@
                                     "
                                 >
                                     {{
-                                        isOptimizing
+                                        isOptimizing && !isCompact
                                             ? t("common.loading")
                                             : t("promptOptimizer.optimize")
                                     }}
@@ -396,18 +396,19 @@
                             </NSpace>
                         </NGridItem>
                     </NGrid>
-                </NSpace>
+                </NSpace></div>
             </TestSourceLinkedCard>
 
             <!-- 优化结果区域 - 使用与基础模式一致的卡片容器 -->
-            <TestSourceLinkedCard
+            </template>
+    <template #workspace><TestSourceLinkedCard class="compact-result-card"
                 :style="{ flex: 1, minHeight: '200px', overflow: 'hidden' }"
                 content-style="height: 100%; max-height: 100%; overflow: hidden;"
                 :feedback-key="sourceAreaFeedback.workspace.key"
                 :feedback-tone="sourceAreaFeedback.workspace.tone"
                 :source-tone="sourceAreaFeedback.workspace.sourceTone"
             >
-                <PromptPanelUI
+                <PromptPanelUI :mobile-layout="isCompact" :enable-evaluation="!isCompact"
                     v-if="services && services.templateManager"
                     test-id="image-image2image"
                     ref="promptPanelRef"
@@ -436,11 +437,11 @@
                     @apply-patch="handleApplyPatch"
                     @open-preview="handleOpenPromptPreview"
                 />
-            </TestSourceLinkedCard>
-                </NFlex>
+            </TestSourceLinkedCard></template>
+  </OptimizeWorkspaceLayout>
             </div>
 
-            <div
+            <div v-if="!isCompact"
                 class="split-divider"
                 role="separator"
                 tabindex="0"
@@ -452,21 +453,22 @@
             />
 
             <!-- 右侧：图像生成测试区域（图像模型，多列 variants） -->
-            <div ref="testPaneRef" class="split-pane" style="min-width: 0; height: 100%; overflow: hidden;">
-                <NFlex vertical :style="{ height: '100%', gap: '12px' }">
-                    <TemporaryVariablesPanel
+            <div v-show="!isCompact || mobileRegion === 'test'" :class="{ 'compact-test-region': isCompact }" ref="testPaneRef" class="split-pane" style="min-width: 0; height: 100%; overflow: hidden;">
+                <VariantTestWorkspaceLayout ref="testLayoutRef" :compact="isCompact" v-model:config-expanded="testConfigExpanded"
+    :variants="mobileVariants" @run-all="runAllVariants"
+    @scroll="rememberTestScroll">
+    <template #input><TemporaryVariablesPanel :compact="isCompact"
                         :manager="temporaryVariablePanelManager"
                         :disabled="isOptimizing"
                         :show-generate-values="true"
                         :is-generating="isGenerating"
                         @generate-values="handleGenerateValues"
-                    />
-                    <!-- 顶部：列数与全局操作 -->
-                    <NCard size="small" :style="{ flexShrink: 0 }">
+                    /></template>
+    <template #global-controls><NCard class="test-global-controls" size="small" :style="{ flexShrink: 0 }">
                         <div class="test-area-top">
-                            <NFlex align="center" :size="8" :wrap="false" style="min-width: 0;">
+                            <NFlex class="test-group-count" align="center" :size="8" :wrap="false" style="min-width: 0;">
                                 <NText :depth="2" class="test-area-label">
-                                    {{ t('test.layout.columns') }}：
+                                    {{ t(isCompact ? 'workspace.testGroups' : 'test.layout.columns') }}：
                                 </NText>
                                 <NRadioGroup
                                     v-model:value="testColumnCountModel"
@@ -479,7 +481,7 @@
                                 </NRadioGroup>
                             </NFlex>
 
-                            <NFlex align="center" justify="end" :size="8" :wrap="false">
+                            <NFlex v-if="!isCompact" align="center" justify="end" :size="8" :wrap="false">
                                 <NButton
                                     type="primary"
                                     size="small"
@@ -492,17 +494,15 @@
                                 </NButton>
                             </NFlex>
                         </div>
-                    </NCard>
-
-                    <!-- 配置区：与结果列对齐 -->
-                    <NCard size="small" :style="{ flexShrink: 0 }">
-                        <div class="variant-deck" :style="{ gridTemplateColumns: testGridTemplateColumns }">
-                            <div v-for="id in activeVariantIds" :key="id" class="variant-cell">
+                    </NCard></template>
+    <template #variant-controls><NCard class="test-variant-controls" size="small" :style="{ flexShrink: 0 }">
+                        <div class="variant-deck" :style="{ gridTemplateColumns: isCompact ? 'minmax(0, 1fr)' : testGridTemplateColumns }">
+                            <div  v-for="id in activeVariantIds" :key="id" class="variant-cell">
                                 <div
                                     class="variant-cell__controls"
                                     :class="{ 'variant-cell__controls--stacked': useStackedVariantControls }"
                                 >
-                                    <div class="variant-cell__meta">
+                                    <div v-if="!isCompact" class="variant-cell__meta">
                                         <TestVariantSourceTag
                                             class="variant-cell__label"
                                             :variant-label="getVariantLabel(id)"
@@ -511,9 +511,9 @@
                                             :labels="getTestPanelVersionLabels()"
                                             :feedback-key="variantSourceFeedback[id].key"
                                             :feedback-tone="variantSourceFeedback[id].tone"
-                                            @activate="activateVariantSource(id)"
+                                            @activate="isCompact ? previewMobileSource(id) : activateVariantSource(id)"
                                         />
-                                        <ImageModelQuickSwitch
+                                        <ImageModelQuickSwitch v-if="!isCompact"
                                             :model-key="variantModelKeyModels[id].value"
                                             :options="imageModelOptions"
                                             :refresh-models="refreshImageModels"
@@ -522,15 +522,16 @@
                                     </div>
 
                                     <div class="variant-cell__actions">
-                                        <TestPanelVersionSelect
+                                        <button v-if="isCompact" type="button" class="test-config-group-label" :aria-label="t('workspace.viewPrompt') + ' ' + id.toUpperCase()" @click="previewMobileSource(id)">{{ id.toUpperCase() }}</button>
+                                        <div class="variant-cell__version"><NText v-if="isCompact" depth="2" class="test-settings-label">{{ t('workspace.promptVersion') }}</NText><TestPanelVersionSelect
                                             :value="variantVersionModels[id].value"
                                             :options="versionOptions"
                                             :disabled="variantRunning[id]"
                                             :test-id="getVariantVersionTestId(id)"
                                             @update:value="(value) => handleVariantVersionChange(id, value)"
-                                        />
+                                        /></div>
 
-                                        <div class="variant-cell__model">
+                                        <div class="variant-cell__model"><NText v-if="isCompact" depth="2" class="test-settings-label">{{ t('test.model') }}</NText>
                                             <SelectWithConfig
                                                 :data-testid="getVariantModelTestId(id)"
                                                 :model-value="variantModelKeyModels[id].value"
@@ -551,7 +552,7 @@
                                             />
                                         </div>
 
-                                        <div class="variant-cell__run">
+                                        <div v-if="!isCompact" class="variant-cell__run">
                                             <ThemedTooltip :label="t('test.layout.runThisColumn')">
                                                 <NButton
                                                     type="primary"
@@ -574,11 +575,9 @@
                                 </div>
                             </div>
                         </div>
-                    </NCard>
-
-                    <!-- 结果区：多列网格（无横向滚动） -->
-                    <div class="variant-results-wrap">
-                        <div class="variant-results" :style="{ gridTemplateColumns: testGridTemplateColumns }">
+                    </NCard></template>
+    <template #results><div class="variant-results-wrap">
+                        <div class="variant-results" :style="{ gridTemplateColumns: isCompact ? 'repeat(2, minmax(0, 1fr))' : testGridTemplateColumns }">
                             <NCard
                                 v-for="id in activeVariantIds"
                                 :key="id"
@@ -586,11 +585,13 @@
                                 class="variant-result-card"
                                 content-style="padding: 0; height: 100%; max-height: 100%; overflow: hidden;"
                             >
+                                <MobileTestResultHeader v-if="isCompact" :variant="mobileVariants.find(item => item.id === id)!"
+                                  :busy="isAnyVariantRunning" @run="runVariant(id)" />
                                 <div class="result-container">
                                     <div class="result-body">
                                         <template v-if="hasVariantResult(id)">
-                                            <NSpace vertical :size="12" style="padding: 12px;">
-                                                <NFlex justify="end" align="center">
+                                            <NSpace class="image-result-content" item-class="image-result-item" vertical :size="12" style="padding: 12px;">
+                                                <NFlex class="image-result-utility" justify="end" align="center">
                                                     <SaveTestResultExampleButton
                                                         sub-mode-key="image-image2image"
                                                         :variant-id="id"
@@ -602,7 +603,7 @@
                                                         :test-id="`save-test-example-image-image2image-${id}`"
                                                     />
                                                 </NFlex>
-                                                <AppPreviewImage
+                                                <AppPreviewImage class="image-result-media"
                                                     :data-testid="getVariantImageTestId(id)"
                                                     :src="getImageSrc(getVariantResult(id)?.images?.[0])"
                                                     object-fit="contain"
@@ -616,7 +617,7 @@
                                                 />
 
                                                 <template v-if="getVariantResult(id)?.text">
-                                                    <NCard
+                                                    <NCard class="image-result-prompt"
                                                         size="small"
                                                         :title="t('imageWorkspace.results.textOutput')"
                                                     >
@@ -629,9 +630,9 @@
                                                     </NCard>
                                                 </template>
 
-                                                <ImageTokenUsage :metadata="getVariantResult(id)?.metadata" :image="getVariantResult(id)?.images?.[0]" :input-image-info="getVariantInputImageInfo(id)" />
+                                                <ImageTokenUsage :compact="isCompact" :metadata="getVariantResult(id)?.metadata" :image="getVariantResult(id)?.images?.[0]" :input-image-info="getVariantInputImageInfo(id)" />
 
-                                                <NSpace justify="center" :size="8">
+                                                <NSpace class="image-result-actions" justify="center" :size="8">
                                                     <NButton
                                                         size="small"
                                                         @click="downloadImageFromResult(getVariantResult(id)?.images?.[0])"
@@ -687,10 +688,14 @@
                                 </div>
                             </NCard>
                         </div>
-                    </div>
-                </NFlex>
+                    </div></template>
+  </VariantTestWorkspaceLayout>
             </div>
         </div>
+    <WorkspaceRegionSwitch v-if="isCompact" v-model="mobileRegion" :optimizing="isOptimizing" :testing="isAnyVariantRunning" />
+    <TestSourcePreview v-model:show="showMobileSource" :title="t('workspace.viewPrompt')" :content="mobileSourceContent"
+      :editable="mobileSourceEditable" @edit="editMobileSource" />
+
 
         <EvaluationPanel
             v-model:show="evaluation.isPanelVisible.value"
@@ -739,7 +744,7 @@
         />
 
         <!-- 图片上传弹窗 -->
-        <n-modal
+        <AdaptiveModal
             data-testid="image-image2image-upload-modal"
             v-model:show="showUploadModal"
             preset="card"
@@ -792,7 +797,7 @@
                     />
                 </div>
             </div>
-        </n-modal>
+        </AdaptiveModal>
 
         <!-- 子模式本地预览面板：不再依赖 PromptOptimizerApp 的全局预览状态 -->
         <PromptPreviewPanel
@@ -815,6 +820,18 @@
 </template>
 
 <script setup lang="ts">
+import AdaptiveModal from '../common/AdaptiveModal.vue'
+import OptimizeWorkspaceLayout from '../common/OptimizeWorkspaceLayout.vue'
+import VariantTestWorkspaceLayout from '../common/VariantTestWorkspaceLayout.vue'
+import MobileTestResultHeader from '../common/MobileTestResultHeader.vue'
+import WorkspaceRegionSwitch from '../common/WorkspaceRegionSwitch.vue'
+import TestSourcePreview from '../common/TestSourcePreview.vue'
+import { useWorkspacePresentation } from '../../composables/ui/useWorkspacePresentation'
+import { useWorkspaceSplit } from '../../composables/ui/useWorkspaceSplit'
+import { useImageWorkspaceHistory } from '../../composables/workspaces/useImageWorkspaceHistory'
+import { useTestVariantBindings } from '../../composables/workspaces/useTestVariantBindings'
+import { useTestSourcePreview } from '../../composables/workspaces/useTestSourcePreview'
+
 import { onMounted, onUnmounted, inject, ref, reactive, computed, watch, nextTick, toRef, type Ref } from 'vue'
 import { useRouter, type LocationQueryRaw } from 'vue-router'
 
@@ -833,7 +850,7 @@ import {
     NP,
     NProgress,
     NAlert,
-    NModal,
+
     NIcon,
     NRadioGroup,
     NRadioButton,
@@ -892,9 +909,7 @@ import {
 } from '../../utils/testPanelVersion'
 import {
     useImageImage2ImageSession,
-    type TestColumnCount,
     type TestPanelVersionValue,
-    type TestVariantConfig,
     type TestVariantId,
 } from '../../stores/session/useImageImage2ImageSession'
 import { useImageGeneration } from '../../composables/image/useImageGeneration'
@@ -903,7 +918,7 @@ import { useFunctionModelManager } from '../../composables/model'
 import { useWorkspaceTemplateSelection } from '../../composables/workspaces/useWorkspaceTemplateSelection'
 import { useWorkspaceTextModelSelection } from '../../composables/workspaces/useWorkspaceTextModelSelection'
 import { useElementSize } from '@vueuse/core'
-import { runTasksWithExecutionMode } from '../../utils/runTasksSequentially'
+import { useWorkspaceTestBatch } from '../../composables/workspaces/useWorkspaceTestBatch'
 import {
     applyPatchOperationsToText,
     type ContextMode,
@@ -1237,160 +1252,34 @@ const imageModelOptions = ref<SelectOption<ImageModelConfig>[]>([])
 
 // ==================== 主布局：可拖拽分栏（左侧 25%~50%） ====================
 
+const {
+    isCompact, compactInputRows, mobileRegion, testConfigExpanded, optimizeLayoutRef, testLayoutRef,
+    rememberOptimizeScroll, rememberTestScroll,
+    showOptimization, showOptimizationSection, showTestResult, resetMobileView,
+  } = useWorkspacePresentation('image-image2image')
 const splitRootRef = ref<HTMLElement | null>(null)
 const testPaneRef = ref<HTMLElement | null>(null)
 
-const clampLeftPct = (pct: number) => Math.min(50, Math.max(25, pct))
-
-// 使用本地 draft，避免拖拽过程频繁写入持久化存储
-const mainSplitLeftPct = ref<number>(50)
-watch(
-    () => session.layout.mainSplitLeftPct,
-    (pct) => {
-        if (typeof pct === 'number' && Number.isFinite(pct)) {
-            mainSplitLeftPct.value = clampLeftPct(Math.round(pct))
-        }
-    },
-    { immediate: true },
-)
-
-const isDraggingSplit = ref(false)
-let dragStartX = 0
-let dragStartPct = 0
-
-const handleSplitPointerMove = (e: PointerEvent) => {
-    const root = splitRootRef.value
-    if (!root) return
-    const rect = root.getBoundingClientRect()
-    if (!rect.width) return
-
-    const deltaX = e.clientX - dragStartX
-    const nextPct = dragStartPct + (deltaX / rect.width) * 100
-    mainSplitLeftPct.value = clampLeftPct(nextPct)
-}
-
-const endSplitDrag = () => {
-    if (!isDraggingSplit.value) return
-    isDraggingSplit.value = false
-    document.removeEventListener('pointermove', handleSplitPointerMove)
-    document.removeEventListener('pointerup', endSplitDrag)
-    document.removeEventListener('pointercancel', endSplitDrag)
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-
-    session.setMainSplitLeftPct(mainSplitLeftPct.value)
-}
-
-const onSplitPointerDown = (e: PointerEvent) => {
-    if (!splitRootRef.value) return
-    dragStartX = e.clientX
-    dragStartPct = mainSplitLeftPct.value
-    isDraggingSplit.value = true
-    document.addEventListener('pointermove', handleSplitPointerMove)
-    document.addEventListener('pointerup', endSplitDrag)
-    document.addEventListener('pointercancel', endSplitDrag)
-    document.body.style.cursor = 'col-resize'
-    document.body.style.userSelect = 'none'
-}
-
-const onSplitKeydown = (e: KeyboardEvent) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'Home' && e.key !== 'End') return
-    e.preventDefault()
-
-    if (e.key === 'Home') {
-        mainSplitLeftPct.value = 25
-    } else if (e.key === 'End') {
-        mainSplitLeftPct.value = 50
-    } else {
-        const delta = e.key === 'ArrowLeft' ? -1 : 1
-        mainSplitLeftPct.value = clampLeftPct(mainSplitLeftPct.value + delta)
-    }
-
-    session.setMainSplitLeftPct(mainSplitLeftPct.value)
-}
-
-onUnmounted(() => {
-    endSplitDrag()
+const { mainSplitLeftPct, onSplitPointerDown, onSplitKeydown } = useWorkspaceSplit({
+  root: splitRootRef,
+  getPercent: () => session.layout.mainSplitLeftPct,
+  setPercent: percent => session.setMainSplitLeftPct(percent),
 })
 
-// ==================== 测试区：多列 variants（按提示词版本 + 图像模型） ====================
-
-const getVariant = (id: TestVariantId): TestVariantConfig | undefined => {
-    const list = session.testVariants as unknown as TestVariantConfig[]
-    return Array.isArray(list) ? list.find((v) => v.id === id) : undefined
-}
-
-const testColumnCountModel = computed<TestColumnCount>({
-    get: () => {
-        const raw = session.layout.testColumnCount
-        return raw === 2 || raw === 3 || raw === 4 ? raw : 2
-    },
-    set: (value) => session.setTestColumnCount(value),
+const {
+  testColumnCountModel, activeVariantIds, variantVersionModels, variantModelKeyModels,
+  allVariantIds: ALL_VARIANT_IDS,
+} = useTestVariantBindings({
+  getVariants: () => session.testVariants,
+  getCount: () => session.layout.testColumnCount,
+  setVariant: (id, patch) => session.updateTestVariant(id, patch),
+  setCount: count => session.setTestColumnCount(count),
 })
-
-const variantAVersionModel = computed<TestPanelVersionValue>({
-    get: () => getVariant('a')?.version ?? 0,
-    set: (value) => session.updateTestVariant('a', { version: value }),
-})
-
-const variantBVersionModel = computed<TestPanelVersionValue>({
-    get: () => getVariant('b')?.version ?? 'workspace',
-    set: (value) => session.updateTestVariant('b', { version: value }),
-})
-
-const variantCVersionModel = computed<TestPanelVersionValue>({
-    get: () => getVariant('c')?.version ?? 'workspace',
-    set: (value) => session.updateTestVariant('c', { version: value }),
-})
-
-const variantDVersionModel = computed<TestPanelVersionValue>({
-    get: () => getVariant('d')?.version ?? 'workspace',
-    set: (value) => session.updateTestVariant('d', { version: value }),
-})
-
-const variantAModelKeyModel = computed<string>({
-    get: () => getVariant('a')?.modelKey ?? '',
-    set: (value) => session.updateTestVariant('a', { modelKey: value }),
-})
-
-const variantBModelKeyModel = computed<string>({
-    get: () => getVariant('b')?.modelKey ?? '',
-    set: (value) => session.updateTestVariant('b', { modelKey: value }),
-})
-
-const variantCModelKeyModel = computed<string>({
-    get: () => getVariant('c')?.modelKey ?? '',
-    set: (value) => session.updateTestVariant('c', { modelKey: value }),
-})
-
-const variantDModelKeyModel = computed<string>({
-    get: () => getVariant('d')?.modelKey ?? '',
-    set: (value) => session.updateTestVariant('d', { modelKey: value }),
-})
-
-const ALL_VARIANT_IDS: TestVariantId[] = ['a', 'b', 'c', 'd']
-const activeVariantIds = computed<TestVariantId[]>(() =>
-    ALL_VARIANT_IDS.slice(0, testColumnCountModel.value),
-)
 const useStackedVariantControls = computed(() => activeVariantIds.value.length >= 2)
-
-const variantVersionModels = {
-    a: variantAVersionModel,
-    b: variantBVersionModel,
-    c: variantCVersionModel,
-    d: variantDVersionModel,
-} as const
-
-const variantModelKeyModels = {
-    a: variantAModelKeyModel,
-    b: variantBModelKeyModel,
-    c: variantCModelKeyModel,
-    d: variantDModelKeyModel,
-} as const
 
 // 测试区宽度：用于禁用 4 列（避免横向滚动）
 const { width: testPaneWidth } = useElementSize(testPaneRef)
-const canUseFourColumns = computed(() => testPaneWidth.value >= 1000)
+const canUseFourColumns = computed(() => isCompact.value || testPaneWidth.value >= 1000)
 watch(
     canUseFourColumns,
     (ok) => {
@@ -1700,7 +1589,7 @@ const getVariantRequest = (id: TestVariantId): Image2ImageRequest | null => {
 }
 
 // 并行生成时避免 saveSession 竞态：串行化保存，最后一次写入应包含最新状态。
-let sessionSaveChain: Promise<void> = Promise.resolve()
+let sessionSaveChain: Promise<boolean | void> = Promise.resolve()
 const queueSessionSave = () => {
     sessionSaveChain = sessionSaveChain
         .then(() => session.saveSession())
@@ -1710,14 +1599,37 @@ const queueSessionSave = () => {
     return sessionSaveChain
 }
 
-const saveSessionAfterHistoryCommit = async (reason: string) => {
-    try {
-        await session.saveSession()
-    } catch (e) {
-        console.error(`[ImageImage2ImageWorkspace] Failed to persist image session after ${reason}:`, e)
-        toast.warning(t('toast.warning.saveHistoryFailed'))
-    }
-}
+const { handleSaveLocalEdit, applyCommittedChain } = useImageWorkspaceHistory({
+    workspaceName: 'ImageImage2ImageWorkspace',
+    historyManager: () => historyManager.value,
+    currentChainId,
+    currentVersions,
+    currentVersionId,
+    session,
+    recordType: 'image2imageOptimize',
+    createRecordId: () => uuidv4(),
+    getOptimizedPrompt: () => optimizedPrompt.value || '',
+    getLocalEdit: () => ({
+        originalPrompt: originalPrompt.value,
+        modelKey: selectedTextModelKey.value,
+        iterateTemplateId: selectedIterateTemplate.value?.id,
+        optimizeTemplateId: selectedTemplate.value?.id,
+        metadata: withHistorySourceBindingMetadata({
+            optimizationMode: 'user' as OptimizationMode,
+            functionMode: 'image',
+            localEdit: true,
+            localEditSource: 'manual',
+            imageModelKey: selectedImageModelKey.value,
+            hasInputImage: !!inputImageB64.value,
+            compareMode: isCompareMode.value,
+        }, session),
+    }),
+    notifyHistoryRefresh: () => {
+        window.dispatchEvent(new CustomEvent('prompt-optimizer:history-refresh'))
+    },
+    toast,
+    t,
+})
 
 const getImageDimensionsFromSource = (src: string): Promise<{ width: number; height: number }> =>
     new Promise((resolve, reject) => {
@@ -1780,6 +1692,7 @@ const runVariant = async (
 
     const request = getVariantRequest(id)
     if (!request) return false
+    const runFingerprint = getVariantFingerprint(id)
 
     variantRunning[id] = true
     try {
@@ -1792,10 +1705,16 @@ const runVariant = async (
             return false
         }
 
-        const res = await generateImage2Image(request)
+        showTestResult(id, !!opts?.silentSuccess)
+    const res = await generateImage2Image(request)
+    const usedModel = imageModels.value.find(model => model.id === request.configId)
+    res.metadata = {
+      providerId: usedModel?.providerId || '', modelId: usedModel?.modelId || '', configId: request.configId,
+      ...res.metadata, prompt: request.prompt,
+    }
         const inputImageInfo = await createVariantInputImageInfo(request.inputImage)
         session.updateTestVariantResult(id, withVariantInputImageInfo(res, inputImageInfo))
-        session.setTestVariantLastRunFingerprint(id, getVariantFingerprint(id))
+        session.setTestVariantLastRunFingerprint(id, runFingerprint)
 
         if (!opts?.silentSuccess) {
             toast.success(t('imageWorkspace.generation.generationCompleted'))
@@ -1814,105 +1733,28 @@ const runVariant = async (
     }
 }
 
-const runAllVariants = async () => {
-    if (isAnyVariantRunning.value) return
+const runAllVariants = useWorkspaceTestBatch({
+  isRunning: () => isAnyVariantRunning.value,
+  getIds: () => activeVariantIds.value,
+  validate: getVariantRequest,
+  prepare: () => {
+    return {
+      run: async (id) =>
+        runVariant(id, { silentSuccess: true, silentError: true, persist: false }),
+      complete: (results) => {
+        queueSessionSave()
 
-    const ids = activeVariantIds.value
-    for (const id of ids) {
-        if (!getVariantRequest(id)) return
+        if (results.every(Boolean)) {
+          toast.success(t('imageWorkspace.generation.generationCompleted'))
+        } else {
+          toast.error(t('imageWorkspace.generation.generateFailed'))
+        }
+      },
     }
-
-    const results = await runTasksWithExecutionMode(
-        ids,
-        async (id) => runVariant(id, { silentSuccess: true, silentError: true, persist: false }),
-    )
-
-    queueSessionSave()
-
-    if (results.every(Boolean)) {
-        toast.success(t('imageWorkspace.generation.generationCompleted'))
-    } else {
-        toast.error(t('imageWorkspace.generation.generateFailed'))
-    }
-}
+  },
+})
 
 // 保存本地编辑
-const handleSaveLocalEdit = async (payload: { note?: string }) => {
-    if (!historyManager.value) {
-        toast.error(t('toast.error.historyUnavailable'))
-        return
-    }
-
-    const newPrompt = optimizedPrompt.value || ''
-    if (!newPrompt.trim()) return
-
-    try {
-        const chainId = currentChainId.value || session.chainId || ''
-        const currentRecord = currentVersions.value.find((v) => v.id === currentVersionId.value)
-
-        const modelKey = currentRecord?.modelKey || selectedTextModelKey.value || 'local-edit'
-        const templateId =
-            currentRecord?.templateId ||
-            selectedIterateTemplate.value?.id ||
-            selectedTemplate.value?.id ||
-            'local-edit'
-
-        const chain = chainId
-            ? await historyManager.value.addIteration({
-                  chainId,
-                  originalPrompt: originalPrompt.value,
-                  optimizedPrompt: newPrompt,
-                  modelKey,
-                  templateId,
-                  iterationNote: payload.note,
-                  metadata: withHistorySourceBindingMetadata({
-                      optimizationMode: 'user' as OptimizationMode,
-                      functionMode: 'image',
-                      localEdit: true,
-                      localEditSource: 'manual',
-                      imageModelKey: selectedImageModelKey.value,
-                      hasInputImage: !!inputImageB64.value,
-                      compareMode: isCompareMode.value,
-                  }, session),
-              })
-            : await historyManager.value.createNewChain({
-                  id: uuidv4(),
-                  originalPrompt: originalPrompt.value,
-                  optimizedPrompt: newPrompt,
-                  type: 'image2imageOptimize' as PromptRecordType,
-                  modelKey,
-                  templateId,
-                  timestamp: Date.now(),
-                  metadata: withHistorySourceBindingMetadata({
-                      optimizationMode: 'user' as OptimizationMode,
-                      functionMode: 'image',
-                      localEdit: true,
-                      localEditSource: 'manual',
-                      imageModelKey: selectedImageModelKey.value,
-                      hasInputImage: !!inputImageB64.value,
-                      compareMode: isCompareMode.value,
-                  }, session),
-              })
-
-        currentChainId.value = chain.chainId
-        currentVersions.value = chain.versions
-        currentVersionId.value = chain.currentRecord.id
-
-        session.updateOptimizedResult({
-            optimizedPrompt: newPrompt,
-            reasoning: '',
-            chainId: chain.chainId,
-            versionId: chain.currentRecord.id,
-        })
-        await saveSessionAfterHistoryCommit('local edit commit')
-
-        window.dispatchEvent(new CustomEvent('prompt-optimizer:history-refresh'))
-        toast.success(t('toast.success.localEditSaved'))
-    } catch (e) {
-        console.error('[ImageImage2ImageWorkspace] Failed to save local edit:', e)
-        toast.warning(t('toast.warning.saveHistoryFailed'))
-    }
-}
 
 // PromptPanel 引用，用于在语言切换后刷新迭代模板选择
 const promptPanelRef = ref<InstanceType<typeof PromptPanelUI> | null>(null);
@@ -1933,6 +1775,9 @@ const handleApplyPatch = (payload: { operation: PatchOperation }) => {
 
 // 输入区折叠状态（初始展开）
 const isInputPanelCollapsed = ref(false);
+const compactAutoFolded = ref(!!optimizedPrompt.value);
+const sourceCollapsed = computed(() => isInputPanelCollapsed.value || (isCompact.value && compactAutoFolded.value));
+watch(optimizedPrompt, value => { if (!value && !isOptimizing.value) compactAutoFolded.value = false });
 
 // 提示词摘要（折叠态显示）
 const promptSummary = computed(() => {
@@ -2078,6 +1923,7 @@ const clearUploadedImage = () => {
 };
 
 const handleClearContent = () => {
+    resetMobileView()
     currentChainId.value = '';
     currentVersions.value = [];
     currentVersionId.value = '';
@@ -2287,16 +2133,10 @@ const createHistoryRecord = async () => {
 
         const newRecord = await historyManager.value.createNewChain(recordData)
         currentChainId.value = newRecord.chainId
-        currentVersions.value = newRecord.versions
-        currentVersionId.value = newRecord.currentRecord.id
-
-        session.updateOptimizedResult({
+        await applyCommittedChain(newRecord, {
             optimizedPrompt: optimizedPrompt.value,
             reasoning: optimizedReasoning.value,
-            chainId: newRecord.chainId,
-            versionId: newRecord.currentRecord.id,
-        })
-        await saveSessionAfterHistoryCommit('optimization commit')
+        }, 'optimization commit')
 
         window.dispatchEvent(new CustomEvent('prompt-optimizer:history-refresh'))
     } catch (e) {
@@ -2409,15 +2249,10 @@ const handleIteratePrompt = async (payload: {
                                 templateId: selectedIterateTemplate.value!.id,
                                 metadata: withHistorySourceBindingMetadata(undefined, session),
                             })
-                            currentVersions.value = updatedChain.versions
-                            currentVersionId.value = updatedChain.currentRecord.id
-                            session.updateOptimizedResult({
+                            await applyCommittedChain(updatedChain, {
                                 optimizedPrompt: optimizedPrompt.value,
                                 reasoning: optimizedReasoning.value,
-                                chainId: updatedChain.chainId,
-                                versionId: updatedChain.currentRecord.id,
-                            })
-                            await saveSessionAfterHistoryCommit('iteration commit')
+                            }, 'iteration commit')
                             window.dispatchEvent(new CustomEvent('prompt-optimizer:history-refresh'))
                         } else {
                             await createHistoryRecord()
@@ -2608,6 +2443,46 @@ onUnmounted(() => {
         );
     }
 });
+
+// The mobile shell shares the same prompt, variants and business actions as desktop.
+const mobileVariants = computed(() => activeVariantIds.value.map(id => {
+  const option = (imageModelOptions.value).find(item => String(OptionAccessors.getValue(item)) === variantModelKeyModels[id].value)
+  return {
+    id,
+    sourceLabel: String(versionOptions.value.find(item => item.value === variantVersionModels[id].value)?.label || ''),
+    modelLabel: option ? String(OptionAccessors.getPrimary(option)) : t('model.select.placeholder'),
+    running: variantRunning[id],
+    promptContent: getVariantResult(id)?.metadata?.prompt ?? resolvePromptForSelection(variantVersionModels[id].value).text,
+    hasPromptSnapshot: typeof getVariantResult(id)?.metadata?.prompt === 'string',
+
+  }
+}))
+const {
+  show: showMobileSource, content: mobileSourceContent, editable: mobileSourceEditable,
+  preview: previewMobileSource, edit: editMobileSource,
+} = useTestSourcePreview({
+  mode: 'snapshot',
+  readSource: (id) => {
+    const selection = variantVersionModels[id].value
+    return {
+      content: resolvePromptForSelection(selection).text,
+      editable: selection === 'workspace' || selection === 0,
+      view: selection === 'workspace' ? 'workspace' : 'original',
+    }
+  },
+  onEdit: async (view) => {
+    if (view === 'original') { isInputPanelCollapsed.value = false; compactAutoFolded.value = false }
+    await showOptimizationSection(view)
+  },
+})
+watch(() => isOptimizing.value, (running, previous) => {
+  if (isCompact.value && running) compactAutoFolded.value = true
+  if (running && !previous) showOptimization()
+})
+// Optional Web host update checkpoint; runtime state stays owned by this workspace.
+defineExpose({
+  isUpdateBusy: () => isOptimizing.value || isIterating.value || isAnyVariantRunning.value || isAnalyzing.value || isGenerating.value || evaluation.isAnyEvaluating.value,
+})
 </script>
 
 <style scoped>

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import { readSessionSnapshot, createSessionSnapshotWriter, runSessionWrite, type SessionWritePermit } from './sessionPersistence'
 import { ref } from 'vue'
 import { getPiniaServices } from '../../plugins/pinia'
 import { isValidVariableName, sanitizeVariableRecord } from '../../types/variable'
@@ -572,8 +573,14 @@ export const useImageMultiImageSession = defineStore('imageMultiImageSession', (
     }
   }
 
-  const saveSession = async () => {
+  const sessionSnapshot = createSessionSnapshotWriter(() => sessionContent)
+
+  const saveSession = (permit?: SessionWritePermit): Promise<boolean> =>
+    runSessionWrite(getPiniaServices()?.preferenceService, persistSession, permit)
+
+  const persistSession = async () => {
     return await queueImageStorageMaintenance(async () => {
+      const capturedContent = sessionSnapshot.capture()
       const $services = getPiniaServices()
       if (!$services?.preferenceService) {
         throw new Error('[ImageMultiImageSession] PreferenceService is unavailable; cannot save session')
@@ -591,10 +598,20 @@ export const useImageMultiImageSession = defineStore('imageMultiImageSession', (
         })),
       )
 
-      inputImages.value = inputImages.value.map((image, index) => ({
-        ...image,
-        assetId: persistedImages[index]?.assetId || image.assetId,
-      }))
+      // Keep an idle save observationally quiet. Replacing an unchanged array
+      // looks like a new edit to autosave and the app-update checkpoint.
+      // Match IDs rather than positions: the list may be reordered while the
+      // image storage writes are pending.
+      const savedAssetIds = new Map(persistedImages.map(image => [image.id, image.assetId]))
+      if (inputImages.value.some(image => {
+        const assetId = savedAssetIds.get(image.id)
+        return assetId && assetId !== image.assetId
+      })) {
+        inputImages.value = inputImages.value.map(image => {
+          const assetId = savedAssetIds.get(image.id)
+          return assetId && assetId !== image.assetId ? { ...image, assetId } : image
+        })
+      }
 
       const baseVariantResults = {
         a: testVariantResults.value.a ?? originalImageResult.value,
@@ -610,7 +627,7 @@ export const useImageMultiImageSession = defineStore('imageMultiImageSession', (
         d: await prepareForSave(baseVariantResults.d, imageStorageService),
       }
 
-      await $services.preferenceService.set(IMAGE_MULTIIMAGE_SESSION_KEY, {
+      await sessionSnapshot.write($services.preferenceService, IMAGE_MULTIIMAGE_SESSION_KEY, {
         originalPrompt: originalPrompt.value,
         optimizedPrompt: optimizedPrompt.value,
         reasoning: reasoning.value,
@@ -632,7 +649,7 @@ export const useImageMultiImageSession = defineStore('imageMultiImageSession', (
         selectedIterateTemplateId: selectedIterateTemplateId.value,
         lastActiveAt: lastActiveAt.value,
         ...assetBindingState.persistedAssetBinding(),
-      })
+      }, capturedContent)
 
       scheduleImageStorageGc($services.preferenceService, imageStorageService)
     })
@@ -648,8 +665,11 @@ export const useImageMultiImageSession = defineStore('imageMultiImageSession', (
     }
     const imageStorageService = $services.imageStorageService
 
-    const saved = await $services.preferenceService.get<unknown>(IMAGE_MULTIIMAGE_SESSION_KEY, null)
-    if (!saved) return
+    const saved = await readSessionSnapshot<unknown>($services.preferenceService,IMAGE_MULTIIMAGE_SESSION_KEY, null)
+    if (!saved) {
+      sessionSnapshot.restored($services.preferenceService, IMAGE_MULTIIMAGE_SESSION_KEY)
+      return
+    }
 
     const parsed =
       typeof saved === 'string'
@@ -743,9 +763,10 @@ export const useImageMultiImageSession = defineStore('imageMultiImageSession', (
     selectedIterateTemplateId.value = typeof parsed.selectedIterateTemplateId === 'string' ? parsed.selectedIterateTemplateId : null
     assetBindingState.restoreAssetBinding(parsed)
     lastActiveAt.value = Date.now()
+    sessionSnapshot.restored($services.preferenceService, IMAGE_MULTIIMAGE_SESSION_KEY)
   }
 
-  return {
+  const sessionContent = {
     originalPrompt,
     optimizedPrompt,
     reasoning,
@@ -768,6 +789,10 @@ export const useImageMultiImageSession = defineStore('imageMultiImageSession', (
     lastActiveAt,
     assetBinding: assetBindingState.assetBinding,
     origin: assetBindingState.origin,
+  }
+
+  return {
+    ...sessionContent,
     updatePrompt,
     updateOptimizedResult,
     updateOriginalImageResult,

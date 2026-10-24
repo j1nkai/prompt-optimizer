@@ -1,4 +1,5 @@
 import type { IImageStorageService, IPreferenceService } from '@prompt-optimizer/core'
+import { hasSessionLocks, withSessionMaintenance } from './sessionConcurrency'
 
 // Session snapshot keys (single source of truth)
 export const BASIC_SYSTEM_SESSION_KEY = 'session/v1/basic-system'
@@ -243,12 +244,54 @@ async function runImageStorageGcNow(
 }
 
 let gcTimer: ReturnType<typeof setTimeout> | null = null
+let gcPauseCount = 0
 let pendingGcServices: {
   preferenceService: IPreferenceService
   imageStorageService: IImageStorageService
   getFavoritesPayload: FavoritesPayloadProvider | null
 } | null = null
 let defaultFavoritesPayloadProvider: FavoritesPayloadProvider | null = null
+
+/** Keep imported assets alive until their session/favorite references are written. */
+export function pauseImageStorageGc(): () => void {
+  gcPauseCount += 1
+  if (gcTimer) clearTimeout(gcTimer)
+  gcTimer = null
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    gcPauseCount -= 1
+    if (!gcPauseCount && pendingGcServices) schedulePendingGc(0)
+  }
+}
+
+function schedulePendingGc(delayMs: number) {
+  if (gcPauseCount || gcTimer) return
+  gcTimer = setTimeout(() => {
+    gcTimer = null
+    const services = pendingGcServices
+    pendingGcServices = null
+    if (!services) return
+
+    void withSessionMaintenance(() => queueImageStorageMaintenance(async () => {
+      // A GC queued before the lease must not run after import starts either.
+      if (gcPauseCount) {
+        pendingGcServices ??= services
+        return
+      }
+      try {
+        await runImageStorageGcNow(
+          services.preferenceService,
+          services.imageStorageService,
+          services.getFavoritesPayload,
+        )
+      } catch (e) {
+        console.error('[imageStorageMaintenance] GC failed:', e)
+      }
+    })).catch(error => console.error('[imageStorageMaintenance] GC coordination failed:', error))
+  }, delayMs)
+}
 
 /**
  * Best-effort schedule for image storage GC.
@@ -263,6 +306,10 @@ export function scheduleImageStorageGc(
     getFavoritesPayload?: FavoritesPayloadProvider | null
   },
 ) {
+  // LAN HTTP can use IndexedDB CAS without Web Locks. Keep orphan images rather
+  // than race another window importing assets whose references are not saved yet.
+  // Explicit storage-management actions remain available; this GC is best-effort.
+  if (preferenceService.compareAndSet && !hasSessionLocks()) return
   const hasFavoritesProviderOverride = !!opts && Object.prototype.hasOwnProperty.call(opts, 'getFavoritesPayload')
   if (hasFavoritesProviderOverride) {
     defaultFavoritesPayloadProvider = opts?.getFavoritesPayload ?? null
@@ -276,23 +323,5 @@ export function scheduleImageStorageGc(
       : defaultFavoritesPayloadProvider,
   }
 
-  if (gcTimer) return
-  gcTimer = setTimeout(() => {
-    gcTimer = null
-    const services = pendingGcServices
-    pendingGcServices = null
-    if (!services) return
-
-    void queueImageStorageMaintenance(async () => {
-      try {
-        await runImageStorageGcNow(
-          services.preferenceService,
-          services.imageStorageService,
-          services.getFavoritesPayload,
-        )
-      } catch (e) {
-        console.error('[imageStorageMaintenance] GC failed:', e)
-      }
-    })
-  }, opts?.delayMs ?? 0)
+  schedulePendingGc(opts?.delayMs ?? 0)
 }

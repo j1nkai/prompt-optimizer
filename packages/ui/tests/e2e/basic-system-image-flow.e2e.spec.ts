@@ -7,6 +7,7 @@ import BasicSystemWorkspace from '../../src/components/basic-mode/BasicSystemWor
 import { resetFunctionModelManagerSingleton } from '../../src/composables/model/useFunctionModelManager'
 import { useBasicSystemSession } from '../../src/stores/session/useBasicSystemSession'
 import { createPreferenceServiceStub, createTestPinia } from '../utils/pinia-test-helpers'
+import { createAppUpdatePreparation } from '../../src/composables/ui/useAppUpdatePreparation'
 
 const toastError = vi.fn()
 
@@ -30,14 +31,16 @@ vi.mock('../../src/composables/ui/useToast', () => ({
   }),
 }))
 
-vi.mock('@vueuse/core', () => ({
+vi.mock('@vueuse/core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@vueuse/core')>(),
   useElementSize: () => ({
     width: ref(1200),
     height: ref(800),
   }),
 }))
 
-vi.mock('naive-ui', () => {
+vi.mock('naive-ui', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('naive-ui')>()
   const passthrough = (name: string) => defineComponent({
     name,
     inheritAttrs: false,
@@ -46,6 +49,7 @@ vi.mock('naive-ui', () => {
   })
 
   return {
+    ...actual,
     NButton: defineComponent({
       name: 'NButton',
       emits: ['click'],
@@ -203,6 +207,81 @@ const readEvaluationRequests = (evaluateStream: EvaluationStreamMock) =>
   evaluateStream.mock.calls.map((call) => call[0] as any)
 
 describe('BasicSystemWorkspace single-image test flow', () => {
+  it('keeps result and compare evaluation blocked until test content is restored', async () => {
+    const { wrapper, store, evaluateStream } = await createHarness()
+    await runAll(wrapper)
+    const workspace = wrapper.vm as any
+    store.testContent = ''
+    await nextTick()
+    await workspace.handleEvaluateResult('a')
+    await workspace.handleResultEvaluateWithFeedbackEvent('a', { feedback: 'check' })
+    await workspace.handleEvaluate('compare')
+    expect(evaluateStream).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenLastCalledWith('test.error.noTestContent')
+
+    store.testContent = 'restored input'
+    await nextTick()
+    await workspace.handleResultEvaluateWithFeedbackEvent('a', { feedback: 'check' })
+    expect(evaluateStream).toHaveBeenCalledOnce()
+    expect(readEvaluationRequests(evaluateStream)[0]).toMatchObject({ type: 'result', focus: { content: 'check' } })
+    wrapper.unmount()
+  })
+
+  it('keeps text detail re-evaluation separate from result-action fingerprint refresh', async () => {
+    const { wrapper, store, evaluateStream } = await createHarness()
+    await runAll(wrapper)
+    const workspace = wrapper.vm as any
+    await workspace.handleEvaluateResult('a')
+    workspace.showResultDetail('a')
+    expect(workspace.isResultEvaluationStale('a')).toBe(false)
+    store.testContent = 'changed input'
+    await nextTick()
+    expect(workspace.isResultEvaluationStale('a')).toBe(true)
+    wrapper.getComponent({ name: 'EvaluationPanel' }).vm.$emit('re-evaluate')
+    await flushPromises()
+    expect(evaluateStream).toHaveBeenCalledTimes(2)
+    expect(workspace.isResultEvaluationStale('a')).toBe(true)
+    wrapper.getComponent({ name: 'EvaluationPanel' }).vm.$emit('evaluate-with-feedback', { feedback: 'focus' })
+    await flushPromises()
+    expect(evaluateStream).toHaveBeenCalledTimes(3)
+    expect(workspace.isResultEvaluationStale('a')).toBe(true)
+    await workspace.handleEvaluateResult('a')
+    expect(workspace.isResultEvaluationStale('a')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('blocks app updates while an evaluation continues after closing its panel', async () => {
+    const { wrapper, evaluateStream } = await createHarness()
+    await runAll(wrapper)
+    let finish = () => {}
+    evaluateStream.mockImplementationOnce(async (_request: unknown, callbacks: any) => {
+      await new Promise<void>(resolve => {
+        finish = () => {
+          callbacks.onComplete({ score: { overall: 88 }, summary: 'ok', improvements: [] })
+          resolve()
+        }
+      })
+    })
+    const workspace = wrapper.vm as any
+    const evaluation = workspace.handleEvaluateResult('a')
+    await flushPromises()
+    workspace.evaluation.closePanel()
+    const flush = vi.fn(async () => true)
+    const prepare = createAppUpdatePreparation({ isBusy: workspace.isUpdateBusy, flush })
+    try {
+      expect(await prepare()).toBe('busy')
+      expect(flush).not.toHaveBeenCalled()
+      finish()
+      await evaluation
+      finish = () => {}
+      expect(await prepare()).toBe('ready')
+      expect(flush).toHaveBeenCalledOnce()
+    } finally {
+      finish()
+      await evaluation
+      wrapper.unmount()
+    }
+  })
   afterEach(() => {
     resetFunctionModelManagerSingleton()
     vi.clearAllMocks()
