@@ -3,8 +3,12 @@
     <NFlex vertical :wrap="false" class="output-fullscreen-layout" style="flex: 1; min-height: 0; overflow: hidden;">
       <NFlex vertical :wrap="false" style="flex: 1; min-height: 0; overflow: hidden;">
         <OutputDisplayCore
+            v-if="internalVisible"
             ref="coreDisplayRef"
+            :initial-view-mode="initialViewMode"
+            test-id="output-fullscreen"
             :content="internalContent"
+            :output-record="outputRecord"
             :originalContent="originalContent"
             :reasoning="reasoning"
             :mode="mode"
@@ -40,13 +44,16 @@ import { NDivider, NFlex, NScrollbar } from 'naive-ui'
 import FullscreenDialog from './FullscreenDialog.vue'
 import OutputDisplayCore from './OutputDisplayCore.vue'
 import type { AppServices } from '../types/services';
+import type { OutputRecord } from '../utils/output-document'
 
 const { t } = useI18n()
 
 // Props
 interface Props {
   modelValue: boolean
+  initialViewMode?: 'render' | 'source' | 'diff'
   content?: string
+  outputRecord?: OutputRecord
   originalContent?: string
   reasoning?: string
   title?: string

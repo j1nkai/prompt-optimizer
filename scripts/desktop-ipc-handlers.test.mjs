@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
+import vm from 'node:vm'
 
 const readText = (relativePath) =>
   fs.readFileSync(path.join(process.cwd(), relativePath), 'utf8')
@@ -50,6 +51,25 @@ test('desktop preload IPC channels have main-process handlers', () => {
   assert.deepEqual(missingHandlers, [])
 })
 
+test('desktop backup restore acknowledges success only after the final disk flush', async () => {
+  const main = readText('packages/desktop/main.js')
+  const handler = main.match(/ipcMain\.handle\('data-importAllData', (async \(event, dataString\) => \{[\s\S]*?)\n  \}\);/)
+  assert.ok(handler)
+  for (const failFlush of [false, true]) {
+    const order = []
+    const invoke = vm.runInNewContext(`(${handler[1]}\n})`, {
+      dataManager: { importAllData: async value => { assert.equal(value, 'backup'); order.push('import') } },
+      storageProvider: { flush: async () => { order.push('flush'); if (failFlush) throw new Error('Disk write failed') } },
+      createSuccessResponse: () => { order.push('success'); return { success: true } },
+      createErrorResponse: error => ({ success: false, error: error.message }),
+    })
+    const result = await invoke(null, 'backup')
+    assert.equal(result.success, !failFlush)
+    assert.deepEqual(order, failFlush ? ['import', 'flush'] : ['import', 'flush', 'success'])
+    if (failFlush) assert.equal(result.error, 'Disk write failed')
+  }
+})
+
 test('desktop prompt test IPC preserves optional image payloads without transforming or logging them', () => {
   const proxy = readText('packages/core/src/services/prompt/electron-proxy.ts')
   const preload = readText('packages/desktop/preload.js')
@@ -65,7 +85,7 @@ test('desktop prompt test IPC preserves optional image payloads without transfor
   )
   assert.match(
     proxy,
-    /this\.api\.testPromptStream\(systemPrompt, userPrompt, modelKey, callbacks, safeInputImages\)/,
+    /this\.api\.testPromptStream\(systemPrompt, userPrompt, modelKey, handlers, safeInputImages\)/,
   )
 
   assert.match(

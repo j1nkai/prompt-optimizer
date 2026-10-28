@@ -12,25 +12,26 @@
       <NFlex ref="toolbarRef" v-if="hasToolbar && (!fitContent || hasContent || hasReasoning)" class="output-display-toolbar" justify="space-between" align="center" style="flex: 0 0 auto;">
         <!-- 左侧：视图控制按钮组 -->
         <NDropdown v-if="foldViewControls" trigger="click" :options="[
-          { key: 'render', label: t('common.render') },
-          { key: 'source', label: t('workspace.sourceText') },
+          { key: 'render', label: t('common.preview') },
+          { key: 'source', label: t('common.source') },
           ...(isActionEnabled('diff') && originalContent ? [{ key: 'diff', label: t('common.compare') }] : []),
         ]" @select="selectCompactView">
           <NButton quaternary size="small" data-testid="output-view-menu" class="output-view-menu">
-            {{ t(internalViewMode === 'render' ? 'common.render' : internalViewMode === 'diff' ? 'common.compare' : 'workspace.sourceText') }}
+            {{ t(internalViewMode === 'render' ? 'common.preview' : internalViewMode === 'diff' ? 'common.compare' : 'common.source') }}
             <NIcon size="14" style="margin-left: 6px"><ChevronDown /></NIcon>
           </NButton>
         </NDropdown>
         <NButtonGroup v-else class="output-view-modes">
           <NButton 
             @click="internalViewMode = 'render'"
+            data-testid="output-view-preview"
             :disabled="!fitContent && internalViewMode === 'render'"
             :aria-pressed="internalViewMode === 'render'"
             :quaternary="fitContent"
             size="small"
             :type="!fitContent && internalViewMode === 'render' ? 'primary' : 'default'"
           >
-            {{ t('common.render') }}
+            {{ t('common.preview') }}
           </NButton>
           <NButton 
             @click="internalViewMode = 'source'"
@@ -41,7 +42,7 @@
             size="small"
             :type="!fitContent && internalViewMode === 'source' ? 'primary' : 'default'"
           >
-            {{ t(fitContent ? 'workspace.sourceText' : 'common.source') }}
+            {{ t('common.source') }}
           </NButton>
           <NButton 
             v-if="isActionEnabled('diff') && originalContent"
@@ -129,6 +130,12 @@
           </div>
           </template>
           <NButton
+            v-if="liveDocument && documentPhase === 'streaming'"
+            size="small"
+            data-testid="output-stop"
+            @click="liveDocument.interrupt()"
+          >{{ t('common.outputStop') }}</NButton>
+          <NButton
             v-if="isActionEnabled('fullscreen')"
             :aria-label="t('common.expand')"
             @click="handleFullscreen"
@@ -164,14 +171,20 @@
             </template>
             
             <NScrollbar class="reasoning-content" ref="reasoningContentRef" style="max-height: clamp(160px, 28vh, 360px); overflow: auto;">
+              <OutputSourceView
+                v-if="liveDocument && isStreaming && hasReasoning"
+                :document="liveDocument"
+                :suspended="previewSuspended"
+                field="reasoning"
+              />
               <MarkdownRenderer
-                v-if="displayReasoning"
+                v-else-if="displayReasoning"
                 :content="displayReasoning"
-                :streaming="streaming"
+                :streaming="isStreaming"
                 :disableInternalScroll="true"
                 class="prose-sm max-w-none px-3 py-2"
               />
-              <NSpace v-else-if="streaming" class="text-gray-500 text-sm italic px-3 py-2">
+              <NSpace v-else-if="isStreaming" class="text-gray-500 text-sm italic px-3 py-2">
                 <NText>{{ t('common.generatingReasoning') }}</NText>
               </NSpace>
             </NScrollbar>
@@ -180,24 +193,37 @@
       </NFlex>
       <!-- 主要内容区域 -->
       <NFlex class="output-display-body" vertical style="flex: 1; min-height: 0; max-height: 100%; overflow: hidden;">
+        <NText v-if="documentPhase === 'cancelled' || documentPhase === 'capacity' || documentPhase === 'failed'" role="status" depth="3">
+          {{ t(documentPhase === 'capacity' ? 'common.outputCapacity' : documentPhase === 'failed' ? 'common.outputFailed' : 'common.outputCancelled') }}
+        </NText>
         <!-- 对比模式 -->
-        <TextDiffUI v-if="internalViewMode === 'diff' && content && originalContent"
-          :originalText="originalContent"
-          :optimizedText="content"
-          :compareResult="compareResult"
-          class="w-full"
-          style="height: 100%; min-height: 0; overflow: auto;"
-        />
+        <NFlex v-if="!isStreaming && internalViewMode === 'diff' && content && originalContent" vertical style="flex:1; min-height:0">
+          <template v-if="diffFallback">
+            <NText depth="3">{{ t('common.outputSourceFallback') }}</NText>
+            <NText depth="3">{{ t('promptOptimizer.originalPrompt') }}</NText>
+            <OutputSourceView :content="originalContent" />
+            <NText depth="3">{{ t('prompt.optimized') }}</NText>
+            <OutputSourceView :content="content" />
+          </template>
+          <TextDiffUI v-else :originalText="originalContent" :optimizedText="content" :compareResult="compareResult" class="w-full" style="height:100%; min-height:0; overflow:auto" />
+        </NFlex>
 
         <!-- 原文模式 -->
-        <template v-else-if="internalViewMode === 'source'">
-          <pre v-if="fitContent && mode === 'readonly'" class="output-source-text">{{ content || placeholder }}</pre>
+        <template v-else-if="internalViewMode === 'source' || isStreaming">
+          <pre v-if="fitContent && mode === 'readonly' && !isStreaming && content.length <= 16384" class="output-source-text">{{ content || placeholder }}</pre>
+          <OutputSourceView
+            v-else-if="mode === 'readonly' || isStreaming"
+            :document="isStreaming ? liveDocument : undefined"
+            :suspended="previewSuspended"
+            :content="content"
+            :fit-content="fitContent"
+          />
           <!-- 🆕 Pro 模式：使用变量感知输入框 -->
           <VariableAwareInput
             v-else-if="shouldEnableVariables && variableData"
             :model-value="content"
             @update:model-value="handleSourceInput"
-            :readonly="mode !== 'editable' || streaming"
+            :readonly="mode !== 'editable' || isStreaming"
             :placeholder="placeholder"
             :autosize="true"
             v-bind="variableData"
@@ -211,13 +237,14 @@
             v-else
             :value="content"
             @input="handleSourceInput"
-            :readonly="mode !== 'editable' || streaming"
+            :readonly="mode !== 'editable' || isStreaming"
             type="textarea"
             :placeholder="placeholder"
             :autosize="fitContent ? { minRows: 5, maxRows: 24 } : { minRows: 10 }"
             style="height: 100%; min-height: 0;"
           />
         </template>
+
 
         <!-- 渲染模式（默认） -->
         <NFlex v-else
@@ -227,8 +254,12 @@
           :justify="displayContent ? 'start' : 'center'"
           style="flex: 1; min-height: 0; overflow: hidden;"
         >
+          <template v-if="displayContent && renderContentType === 'source'">
+            <NText depth="3">{{ t('common.outputSourceFallback') }}</NText>
+            <OutputSourceView :content="content" :fit-content="fitContent" />
+          </template>
           <XmlRenderer
-            v-if="displayContent && renderContentType === 'xml'"
+            v-else-if="displayContent && renderContentType === 'xml'"
             :content="displayContent"
             style="flex: 1; min-height: 0; overflow: auto;"
           />
@@ -236,11 +267,13 @@
             v-else-if="displayContent"
             :disable-internal-scroll="fitContent"
             :content="displayContent"
-            :streaming="streaming"
+            :html-previews="allowHtmlPreviews"
+            :suspended="previewSuspended"
+            :streaming="isStreaming"
             style="flex: 1; min-height: 0; overflow: auto;"
           />
           <NEmpty
-            v-else-if="!loading && !streaming"
+            v-else-if="!loading && !isStreaming"
             :description="placeholder || t('common.noContent')"
             class="flex items-center justify-center"
             style="height: 100%;"
@@ -254,7 +287,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, onMounted, inject, h, type Ref } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount, inject, h, type Ref } from 'vue'
 import { useElementSize } from '@vueuse/core'
 
 import { useI18n } from 'vue-i18n'
@@ -272,6 +305,9 @@ import {
 import { useClipboard } from '../composables/ui/useClipboard'
 import MarkdownRenderer from './MarkdownRenderer.vue'
 import XmlRenderer from './XmlRenderer.vue'
+import OutputSourceView from './OutputSourceView.vue'
+import { getOutputDocument, type OutputRecord, type OutputPhase } from '../utils/output-document'
+import { extractHtmlCandidate } from '../utils/html-preview'
 import TextDiffUI from './TextDiff.vue'
 import type { CompareResult, ICompareService } from '@prompt-optimizer/core'
 import { VariableAwareInput } from './variable-extraction'
@@ -280,7 +316,8 @@ import { useVariableAwareInputBridge } from '../composables/variable/useVariable
 import { useVariableManager } from '../composables/prompt/useVariableManager'
 import type { AppServices } from '../types/services'
 import { router as routerInstance } from '../router'
-import { isValidXmlContent } from '../utils/xml-renderer'
+import { isValidXmlContent, fitsXmlRenderBudget } from '../utils/xml-renderer'
+import { createMarkdownOutputClient } from '../utils/markdown-output-client'
 import {
   buildCopyOpenActionUrl,
   COPY_OPEN_ACTIONS,
@@ -308,8 +345,11 @@ const services = inject<Ref<AppServices | null>>('services') ?? ref<AppServices 
 // 组件 Props
 interface Props {
   fitContent?: boolean
+  initialViewMode?: 'render' | 'source' | 'diff'
+  previewSuspended?: boolean
   // 内容相关
   content?: string
+  outputRecord?: OutputRecord
   originalContent?: string
   reasoning?: string
 
@@ -341,6 +381,7 @@ const props = withDefaults(defineProps<Props>(), {
   reasoning: '',
   testId: undefined,
   mode: 'readonly',
+  initialViewMode: 'render',
   reasoningMode: 'auto',
   enabledActions: () => ['fullscreen', 'diff', 'copy', 'edit', 'reasoning', 'favorite'],
   height: '100%',
@@ -410,7 +451,7 @@ const reasoningContentRef = ref<ScrollbarLike | null>(null)
 const userHasManuallyToggledReasoning = ref(false)
 
 // 新的视图状态机
-const internalViewMode = ref<'render' | 'source' | 'diff'>('render')
+const internalViewMode = ref<'render' | 'source' | 'diff'>(props.initialViewMode)
 const selectCompactView = (key: string) => {
   if (key === 'render' || key === 'source' || key === 'diff') internalViewMode.value = key
 }
@@ -420,6 +461,10 @@ const EMPTY_COMPARE_RESULT: CompareResult = {
   summary: { additions: 0, deletions: 0, unchanged: 0 },
 }
 const compareResult = ref<CompareResult>(EMPTY_COMPARE_RESULT)
+const diffFallback = ref(false)
+let diffClient: ReturnType<typeof createMarkdownOutputClient> | undefined
+let diffGeneration = 0
+onBeforeUnmount(() => { diffGeneration++; diffClient?.dispose() })
 
 // 推理折叠面板状态
 const reasoningExpandedNames = ref<string[]>([])
@@ -432,26 +477,49 @@ const hasToolbar = computed(() =>
 
 // 计算属性
 const displayContent = computed(() => (props.content || '').trim())
+const liveDocument = computed(() => { void props.outputRecord?.status; return getOutputDocument(props.outputRecord) })
+const documentPhase = ref<OutputPhase>()
+const isStreaming = computed(() => props.streaming || documentPhase.value === 'streaming')
+const documentHasContent = ref(false)
+const documentHasReasoning = ref(false)
+let unsubscribeDocument: (() => void) | undefined
+watch(liveDocument, document => {
+  unsubscribeDocument?.()
+  const refresh = () => {
+    documentPhase.value = document?.phase ?? props.outputRecord?.status
+    documentHasContent.value = Boolean(document?.size('result'))
+    documentHasReasoning.value = Boolean(document?.size('reasoning'))
+  }
+  refresh()
+  unsubscribeDocument = document?.subscribe(refresh)
+}, { immediate: true })
+watch(() => props.outputRecord?.status, () => { documentPhase.value = liveDocument.value?.phase ?? props.outputRecord?.status })
+onBeforeUnmount(() => unsubscribeDocument?.())
+const readCurrentContent = () => liveDocument.value?.isLive ? liveDocument.value.read('result') : props.content ?? ''
 const displayReasoning = computed(() => (props.reasoning || '').trim())
+const htmlCandidate = computed(() => extractHtmlCandidate(props.content || ''))
+const allowHtmlPreviews = computed(() => !isStreaming.value && !props.loading &&
+  (!documentPhase.value || documentPhase.value === 'complete'))
 const copyActionWorkspacePath = computed(() => routerInstance.currentRoute.value.path || '/')
 const activeCopyActionId = ref<CopyOpenActionId>(
   readCopyOpenActionFromSession(copyActionWorkspacePath.value),
 )
 
-const renderContentType = computed<'markdown' | 'xml'>(() => {
+const renderContentType = computed<'markdown' | 'xml' | 'source'>(() => {
   if (!displayContent.value) return 'markdown'
 
   // Avoid format jumps while text is still being streamed.
-  if (props.streaming) return 'markdown'
+  if (isStreaming.value) return 'markdown'
+  if (!htmlCandidate.value && /^(?:<|```xml\b)/iu.test(displayContent.value) && !fitsXmlRenderBudget(displayContent.value)) return 'source'
 
-  return isValidXmlContent(displayContent.value) ? 'xml' : 'markdown'
+  return !htmlCandidate.value && isValidXmlContent(displayContent.value) ? 'xml' : 'markdown'
 })
 
-const hasContent = computed(() => !!displayContent.value)
-const hasReasoning = computed(() => !!displayReasoning.value)
+const hasContent = computed(() => (isStreaming.value && documentHasContent.value) || !!displayContent.value)
+const hasReasoning = computed(() => (isStreaming.value && documentHasReasoning.value) || !!displayReasoning.value)
 
 const isReasoningStreaming = computed(() => {
-  return props.streaming && hasReasoning.value && !hasContent.value
+  return isStreaming.value && hasReasoning.value && !hasContent.value
 })
 
 const shouldShowReasoning = computed(() => {
@@ -524,7 +592,7 @@ const copyDisplayText = async (
 }
 
 const handlePrimaryCopyAction = async () => {
-  const textToCopy = displayContent.value
+  const textToCopy = readCurrentContent().trim()
   const copied = await copyDisplayText(textToCopy, 'content')
   if (!copied || activeCopyActionId.value === DEFAULT_COPY_OPEN_ACTION_ID) return
 
@@ -579,30 +647,28 @@ const scrollReasoningToBottom = () => {
 }
 
 // 对比功能
-const updateCompareResult = async () => {
-  if (internalViewMode.value === 'diff' && props.originalContent && props.content) {
-    try {
-      const compareService = props.compareService ?? services.value?.compareService
-      if (!compareService) throw new Error('CompareService not available')
-
-      compareResult.value = await compareService.compareTexts(
-        props.originalContent,
-        props.content
-      )
-    } catch (error) {
-      console.error('[OutputDisplayCore] Error calculating diff:', error)
-      message.warning(t('toast.warning.compareFailed'))
-      compareResult.value = EMPTY_COMPARE_RESULT
-    }
-  } else {
+const updateCompareResult = () => {
+  const generation = ++diffGeneration
+  diffClient?.cancel()
+  if (isStreaming.value || internalViewMode.value !== 'diff' || !props.originalContent || !props.content) {
+    diffClient?.dispose()
+    diffClient = undefined
     compareResult.value = EMPTY_COMPARE_RESULT
+    return
   }
+  diffFallback.value = true
+  diffClient ??= createMarkdownOutputClient()
+  diffClient.requestDiff(props.originalContent, props.content, output => {
+    if (generation !== diffGeneration) return
+    diffFallback.value = output.kind !== 'diff'
+    compareResult.value = output.kind === 'diff' ? output.result : EMPTY_COMPARE_RESULT
+  })
 }
 
 // 智能自动切换逻辑
 const previousViewMode = ref<'render' | 'source' | 'diff' | null>(null)
 
-watch(() => props.streaming, (isStreaming, wasStreaming) => {
+watch(() => isStreaming.value, (isStreaming, wasStreaming) => {
   if (isStreaming && !wasStreaming) {
     // 新任务开始，重置用户记忆
     userHasManuallyToggledReasoning.value = false
@@ -626,7 +692,7 @@ watch(() => props.streaming, (isStreaming, wasStreaming) => {
       previousViewMode.value = null
     }
   }
-})
+}, { immediate: true })
 
 watch(internalViewMode, updateCompareResult, { immediate: true })
 watch(internalViewMode, view => emit('view-change', view === 'diff' ? 'diff' : 'base'), { immediate: true })
@@ -638,7 +704,7 @@ watch(() => [props.content, props.originalContent], () => {
 
 watch(() => props.reasoning, (newReasoning, oldReasoning) => {
   // 当推理内容从无到有，且用户未手动干预时，自动展开
-  if (newReasoning && !oldReasoning && !userHasManuallyToggledReasoning.value) {
+  if (isStreaming.value && !hasContent.value && newReasoning && !oldReasoning && !userHasManuallyToggledReasoning.value) {
     isReasoningExpanded.value = true
   }
   
@@ -647,11 +713,17 @@ watch(() => props.reasoning, (newReasoning, oldReasoning) => {
     scrollReasoningToBottom()
   }
 }, { flush: 'post' })
+watch(documentHasReasoning, value => {
+  if (value && !documentHasContent.value && !userHasManuallyToggledReasoning.value) isReasoningExpanded.value = true
+})
+watch(documentHasContent, value => {
+  if (value && !userHasManuallyToggledReasoning.value) isReasoningExpanded.value = false
+})
 
 watch(() => props.content, (newContent, oldContent) => {
   // 当主要内容开始流式输出时，如果用户未干预，自动折叠思考过程
   const mainContentJustStarted = newContent && !oldContent
-  if (props.streaming && mainContentJustStarted && !userHasManuallyToggledReasoning.value) {
+  if (isStreaming.value && mainContentJustStarted && !userHasManuallyToggledReasoning.value) {
     isReasoningExpanded.value = false
   }
 })
@@ -709,7 +781,7 @@ onMounted(() => {
   // - functionMode 有默认值 'basic'，可以正常工作
 
   // 如果是可编辑模式，默认显示原文
-  if (props.mode === 'editable' && !props.fitContent) {
+  if (props.mode === 'editable' && !props.fitContent && props.initialViewMode === 'render') {
     internalViewMode.value = 'source';
   }
 });
@@ -723,7 +795,7 @@ watch(() => props.mode, (newMode) => {
   }
 });
 
-defineExpose({ resetReasoningState, forceRefreshContent, forceExitEditing })
+defineExpose({ resetReasoningState, forceRefreshContent, forceExitEditing, getViewMode: () => internalViewMode.value })
 </script>
 
 <style scoped>
@@ -733,6 +805,23 @@ defineExpose({ resetReasoningState, forceRefreshContent, forceExitEditing })
   padding: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.7;
+}
+.output-source-input {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 12px;
+  resize: none;
+  overflow: auto;
+  border: 1px solid var(--n-border-color, transparent);
+  border-radius: 3px;
+  background: var(--n-color, transparent);
+  color: inherit;
   font: inherit;
   line-height: 1.7;
 }

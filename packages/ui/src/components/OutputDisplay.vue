@@ -3,6 +3,7 @@
     ref="coreDisplayRef"
     v-bind="$attrs"
     :content="content"
+    :output-record="outputRecord"
     :fit-content="fitContent"
     :originalContent="originalContent"
     :reasoning="reasoning"
@@ -13,6 +14,7 @@
     :placeholder="placeholder"
     :loading="loading"
     :streaming="streaming"
+    :preview-suspended="isShowingFullscreen"
     :compareService="compareService"
     :test-id="testId"
     :style="fitContent ? { height: 'auto', maxHeight: 'none', overflow: 'visible' } : { height: '100%', maxHeight: '100%', flex: 1, minHeight: 0, overflow: 'hidden' }"
@@ -33,6 +35,7 @@
   <OutputDisplayFullscreen
     v-model="isShowingFullscreen"
     :content="content"
+    :output-record="outputRecord"
     :originalContent="originalContent"
     :reasoning="reasoning"
     :title="title"
@@ -42,6 +45,7 @@
     :streaming="streaming"
     :loading="loading"
     :placeholder="placeholder"
+    :initial-view-mode="fullscreenViewMode"
     @update:content="emit('update:content', $event)"
     @copy="handleCopy"
   />
@@ -53,6 +57,7 @@ import { computed, ref, inject, type Ref } from 'vue'
 import OutputDisplayCore from './OutputDisplayCore.vue';
 import OutputDisplayFullscreen from './OutputDisplayFullscreen.vue';
 import type { AppServices } from '../types/services';
+import type { OutputRecord } from '../utils/output-document'
 
 defineOptions({
   inheritAttrs: false,
@@ -64,6 +69,7 @@ type ActionName = 'fullscreen' | 'diff' | 'copy' | 'edit' | 'reasoning' | 'favor
 interface Props {
   fitContent?: boolean
   content?: string
+  outputRecord?: OutputRecord
   originalContent?: string
   reasoning?: string
   title?: string // title is used by fullscreen wrapper, but keep it here for compatibility
@@ -107,6 +113,7 @@ const emit = defineEmits<{
 }>()
 
 const isShowingFullscreen = ref(false);
+const fullscreenViewMode = ref<'render' | 'source' | 'diff'>('render')
 
 const testId = computed(() => props.testId || undefined)
 
@@ -145,6 +152,7 @@ const handleCopy = (content: string, type: 'content' | 'reasoning' | 'all') => {
 }
 
 const handleFullscreen = () => {
+  fullscreenViewMode.value = coreDisplayRef.value?.getViewMode() ?? 'render'
   isShowingFullscreen.value = true;
   emit('fullscreen');
 }
