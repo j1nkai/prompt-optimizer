@@ -58,45 +58,17 @@
 
                     <!-- 优化控制区 -->
                     <NCard class="multi-optimize-controls" :style="{ flexShrink: 0 }" size="small">
-                        <NFlex class="multi-optimize-grid" vertical :size="12">
-                            <!-- 模型和模板选择行 -->
-                            <NFlex class="multi-optimize-selectors" :size="12" :wrap="false">
-                                <!-- 优化模型选择 -->
-                                <NFlex class="multi-optimize-field" vertical :size="4" style="flex: 1">
-                                    <NFlex align="center" :size="6" :wrap="false">
-                                        <NText class="multi-optimize-label" :depth="3" style="font-size: 12px; flex-shrink: 0;">
-                                            {{ $t('promptOptimizer.optimizeModel') }}
-                                        </NText>
-                                        <TextModelQuickSwitch v-if="!isCompact"
-                                            :model-key="selectedOptimizeModelKeyModel"
-                                            :options="modelSelection.textModelOptions.value"
-                                            :refresh-models="modelSelection.refreshTextModels"
-                                            :disabled="conversationOptimization.isOptimizing.value"
-                                        />
-                                    </NFlex>
-                                    <SelectWithConfig
+                        <OptimizationControls :compact="isCompact">
+                            <template #model><TextModelSelector
                                         v-model="selectedOptimizeModelKeyModel"
                                         :options="modelSelection.textModelOptions.value"
-                                        :getPrimary="OptionAccessors.getPrimary"
-                                        :getSecondary="OptionAccessors.getSecondary"
-                                        :getValue="OptionAccessors.getValue"
                                         :placeholder="t('model.select.placeholder')"
                                         size="medium"
                                         :disabled="conversationOptimization.isOptimizing.value"
-                                        filterable
-                                        :show-config-action="true"
-                                        :show-empty-config-c-t-a="true"
                                         @focus="modelSelection.refreshTextModels"
                                         @config="handleOpenModelManager"
-                                    />
-                                </NFlex>
-
-                                <!-- 模板选择 -->
-                                <NFlex class="multi-optimize-field" vertical :size="4" style="flex: 1">
-                                    <NText class="multi-optimize-label" :depth="3" style="font-size: 12px">
-                                        {{ $t('promptOptimizer.templateLabel') }}
-                                    </NText>
-                                    <SelectWithConfig
+                                    /></template>
+                            <template #template><SelectWithConfig
                                         v-model="selectedTemplateIdModel"
                                         :options="templateSelection.templateOptions.value"
                                         :getPrimary="OptionAccessors.getPrimary"
@@ -110,22 +82,18 @@
                                         :show-empty-config-c-t-a="true"
                                         @focus="templateSelection.refreshOptimizeTemplates"
                                         @config="handleOpenTemplateManager"
-                                    />
-                                </NFlex>
-                            </NFlex>
-
-                            <NButton
+                                    /></template>
+                            <template #actions><NButton
                                 type="primary"
                                 :loading="displayAdapter.displayedIsOptimizing.value"
                                 :disabled="displayAdapter.displayedIsOptimizing.value || !selectedMessageId"
                                 @click="handleOptimizeClick"
-                                block
                                 data-testid="pro-multi-optimize-button"
                                 :aria-label="isCompact ? t('promptOptimizer.optimize') : undefined"
                             >
                                 {{ displayAdapter.displayedIsOptimizing.value && !isCompact ? $t('common.loading') : $t('promptOptimizer.optimize') }}
-                            </NButton>
-                        </NFlex>
+                            </NButton></template>
+                        </OptimizationControls>
                     </NCard>
 
                     <!-- 优化结果面板 -->
@@ -211,117 +179,77 @@
                         @temporary-variable-remove="handleVariableRemove"
                         @temporary-variables-clear="handleVariablesClear"
                     /></template>
-    <template #global-controls><NCard class="test-global-controls" size="small" :style="{ flexShrink: 0 }">
-                        <div class="test-area-top">
-                            <NFlex class="test-group-count" align="center" :size="8" :wrap="false" style="min-width: 0;">
-                                <NText :depth="2" class="test-area-label">
-                                    {{ t(isCompact ? 'workspace.testGroups' : 'test.layout.columns') }}：
-                                </NText>
-                                <NRadioGroup
-                                    v-model:value="testColumnCountModel"
-                                    size="small"
-                                    :disabled="isAnyVariantRunning"
-                                >
-                                    <NRadioButton :value="2">2</NRadioButton>
-                                    <NRadioButton :value="3">3</NRadioButton>
-                                    <NRadioButton :value="4" :disabled="!canUseFourColumns">4</NRadioButton>
-                                </NRadioGroup>
-                            </NFlex>
-
-                            <NFlex v-if="!isCompact" align="center" justify="end" :size="8" :wrap="false">
-                                <NButton
-                                    type="primary"
-                                    size="small"
-                                    :loading="isAnyVariantRunning"
-                                    :disabled="isAnyVariantRunning"
-                                    @click="runAllVariants"
-                                    :data-testid="'pro-multi-test-run-all'"
-                                >
-                                    {{ t('test.layout.runAll') }}
-                                </NButton>
-
-                                <template v-if="hasCompareCandidates || hasCompareEvaluation">
-                                    <EvaluationScoreBadge
-                                        v-if="hasCompareEvaluation || isEvaluatingCompare"
-                                        :score="compareScore"
-                                        :level="compareScoreLevel"
-                                        :loading="isEvaluatingCompare"
-                                        :result="compareEvaluationResult"
-                                        type="compare"
-                                        :stale="isCompareEvaluationStale"
-                                        :stale-message="t('evaluation.stale.compare')"
-                                        :disable-evaluate="!canEvaluateCompare"
-                                        :disable-evaluate-reason="compareDisabledReason"
-                                        size="small"
-                                        @show-detail="() => showDetail('compare')"
-                                        @evaluate="() => handleEvaluate('compare')"
-                                        @evaluate-with-feedback="handleEvaluateWithFeedback"
-                                        @apply-improvement="handleApplyImprovement"
-                                        @apply-patch="handleApplyLocalPatch"
-                                    />
-                                    <FocusAnalyzeButton
-                                        v-else
-                                        type="compare"
-                                        :label="t('evaluation.compareEvaluate')"
-                                        :disabled="!canEvaluateCompare"
-                                        :disabled-reason="compareDisabledReason"
-                                        :loading="isEvaluatingCompare"
-                                        :button-props="{ size: 'small', type: 'tertiary' }"
-                                        @evaluate="() => handleEvaluate('compare')"
-                                        @evaluate-with-feedback="handleEvaluateWithFeedback"
-                                    >
-                                        <template #icon>
-                                            <AnalyzeActionIcon />
-                                        </template>
-                                    </FocusAnalyzeButton>
-                                </template>
-                                <CompareHelpButton v-if="!isCompact && (activeVariantIds.length >= 2)" />
-                                <NTag
-                                    v-if="compareToolbarStatus"
-                                    size="small"
-                                    :type="compareToolbarStatus.type"
-                                    :bordered="false"
-                                >
-                                    {{ compareToolbarStatus.label }}
-                                </NTag>
-                            </NFlex>
-                        </div>
-                    </NCard></template>
-    <template #variant-controls><NCard class="test-variant-controls" size="small" :style="{ flexShrink: 0 }">
+    <template #global-controls><TestWorkspaceToolbar v-model:count="testColumnCountModel"
+      :compact="isCompact" :running="isAnyVariantRunning" :can-use-four-columns="canUseFourColumns"
+      run-test-id="pro-multi-test-run-all"
+      @run="runAllVariants">
+      <template #comparison>
+        <CompareRoleSummary :entries="compareRoleConfig.entries.value"
+          :warning="compareToolbarStatus?.label" :disabled="isAnyVariantRunning" @click="openCompareRoleConfig" />
+      </template>
+      <template #evaluation>
+        <template v-if="hasCompareCandidates || hasCompareEvaluation">
+          <EvaluationScoreBadge
+            v-if="hasCompareEvaluation || isEvaluatingCompare"
+            :score="compareScore"
+            :level="compareScoreLevel"
+            :loading="isEvaluatingCompare"
+            :result="compareEvaluationResult"
+            type="compare"
+            :stale="isCompareEvaluationStale"
+            :stale-message="t('evaluation.stale.compare')"
+            :disable-evaluate="!canEvaluateCompare"
+            :disable-evaluate-reason="compareDisabledReason"
+            size="small"
+            @show-detail="() => showDetail('compare')"
+            @evaluate="() => handleEvaluate('compare')"
+            @evaluate-with-feedback="handleEvaluateWithFeedback"
+            @apply-improvement="handleApplyImprovement"
+            @apply-patch="handleApplyLocalPatch"
+          />
+          <FocusAnalyzeButton
+            v-else
+            type="compare"
+            :label="t('evaluation.compareEvaluate')"
+            :disabled="!canEvaluateCompare"
+            :disabled-reason="compareDisabledReason"
+            :loading="isEvaluatingCompare"
+            :button-props="{ size: 'small', type: 'tertiary' }"
+            @evaluate="() => handleEvaluate('compare')"
+            @evaluate-with-feedback="handleEvaluateWithFeedback"
+          >
+            <template #icon>
+              <AnalyzeActionIcon />
+            </template>
+          </FocusAnalyzeButton>
+        </template>
+        <CompareHelpButton v-if="!isCompact && (activeVariantIds.length >= 2)" />
+      </template>
+    </TestWorkspaceToolbar></template>
+    <template #variant-controls><NCard class="test-variant-controls" size="small" :style="{ flexShrink: 0 }" :content-style="isCompact ? undefined : { padding: '12px' }">
                         <div class="variant-deck" :style="{ gridTemplateColumns: isCompact ? 'minmax(0, 1fr)' : testGridTemplateColumns }">
                             <div  v-for="id in activeVariantIds" :key="id" class="variant-cell">
-                                <div
+                                <TestVariantConfig :preview-source="() => readVariantSource(id)" v-if="!isCompact"
+                                  :label="getVariantLabel(id)" :version="variantVersionModels[id].value" :version-options="versionOptions"
+                                  :model-key="variantModelKeyModels[id].value" :options="modelSelection.textModelOptions.value" :refresh-models="modelSelection.refreshTextModels"
+                                  :running="variantRunning[id]" :disabled="isAnyVariantRunning"
+                                  :run-disabled="isAnyVariantRunning && !variantRunning[id]"
+                                  :feedback-tone="variantSourceFeedback[id].tone" :feedback-key="variantSourceFeedback[id].key"
+                                  :version-test-id="getVariantVersionTestId(id)" :model-test-id="getVariantModelTestId(id)" :run-test-id="getVariantRunTestId(id)"
+                                  @update:version="handleVariantVersionChange(id, $event)"
+                                  @update:model-key="variantModelKeyModels[id].value = $event"
+                                  @preview="previewMobileSource(id)" @run="runVariant(id)" @config="emit('config-model')">
+
+                                </TestVariantConfig>
+                                <div v-else
                                     class="variant-cell__controls"
                                     :class="{ 'variant-cell__controls--stacked': useStackedVariantControls }"
                                 >
-                                    <div v-if="!isCompact" class="variant-cell__meta">
-                                        <TestVariantSourceTag
-                                            class="variant-cell__label"
-                                            :variant-label="getVariantLabel(id)"
-                                            :selection="variantVersionModels[id].value"
-                                            :resolved-version="getVariantResolvedVersion(id)"
-                                            :labels="getTestPanelVersionLabels()"
-                                            :feedback-key="variantSourceFeedback[id].key"
-                                            :feedback-tone="variantSourceFeedback[id].tone"
-                                            @activate="isCompact ? previewMobileSource(id) : activateVariantSource(id)"
-                                        />
-                                        <CompareRoleBadge
-                                            v-if="!isCompact && (activeVariantIds.length >= 2)"
-                                            :entry="compareRoleEntryMap[id]"
-                                            clickable
-                                            @click="openCompareRoleConfig"
-                                        />
-                                        <TextModelQuickSwitch v-if="!isCompact"
-                                            :model-key="variantModelKeyModels[id].value"
-                                            :options="modelSelection.textModelOptions.value"
-                                            :refresh-models="modelSelection.refreshTextModels"
-                                            :disabled="variantRunning[id] || isAnyVariantRunning"
-                                        />
-                                    </div>
+
 
                                     <div class="variant-cell__actions">
                                         <button v-if="isCompact" type="button" class="test-config-group-label" :aria-label="t('workspace.viewPrompt') + ' ' + id.toUpperCase()" @click="previewMobileSource(id)">{{ id.toUpperCase() }}</button>
-                                        <div class="variant-cell__version"><NText v-if="isCompact" depth="2" class="test-settings-label">{{ t('workspace.promptVersion') }}</NText><TestPanelVersionSelect
+                                        <div class="variant-cell__version"><NText v-if="isCompact" depth="2" class="test-settings-label">{{ t('workspace.promptVersion') }}</NText><TestPanelVersionSelect :preview-source="() => readVariantSource(id)" @preview="previewMobileSource(id)"
                                             :value="variantVersionModels[id].value"
                                             :options="versionOptions"
                                             :disabled="variantRunning[id] || isAnyVariantRunning"
@@ -329,45 +257,21 @@
                                             @update:value="(value) => handleVariantVersionChange(id, value)"
                                         /></div>
                                         <div class="variant-cell__model"><NText v-if="isCompact" depth="2" class="test-settings-label">{{ t('test.model') }}</NText>
-                                            <SelectWithConfig
+                                            <TextModelSelector scope="column"
                                                 :data-testid="getVariantModelTestId(id)"
                                                 :model-value="variantModelKeyModels[id].value"
                                                 @update:model-value="(value) => { variantModelKeyModels[id].value = String(value ?? '') }"
                                                 :options="modelSelection.textModelOptions.value"
-                                                :getPrimary="OptionAccessors.getPrimary"
-                                                :getSecondary="OptionAccessors.getSecondary"
-                                                :getValue="OptionAccessors.getValue"
                                                 :placeholder="t('model.select.placeholder')"
                                                 size="medium"
                                                 :disabled="variantRunning[id] || isAnyVariantRunning"
-                                                filterable
-                                                :show-config-action="true"
-                                                :show-empty-config-c-t-a="true"
                                                 @focus="modelSelection.refreshTextModels"
                                                 @config="emit('config-model')"
                                                 style="min-width: 0; width: 100%;"
                                             />
                                         </div>
 
-                                        <div v-if="!isCompact" class="variant-cell__run">
-                                            <ThemedTooltip :label="t('test.layout.runThisColumn')">
-                                                <NButton
-                                                    type="primary"
-                                                    size="small"
-                                                    circle
-                                                    :loading="variantRunning[id]"
-                                                    :disabled="isAnyVariantRunning && !variantRunning[id]"
-                                                    @click="() => runVariant(id)"
-                                                    :data-testid="getVariantRunTestId(id)"
-                                                >
-                                                    <template #icon>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                                                            <path d="M8 5v14l11-7z" />
-                                                        </svg>
-                                                    </template>
-                                                </NButton>
-                                            </ThemedTooltip>
-                                        </div>
+
                                     </div>
                                 </div>
                             </div>
@@ -496,6 +400,7 @@
             @retry="handleReEvaluateActive"
         />
         <CompareRoleConfigDialog
+            :model-labels="Object.fromEntries(modelSelection.textModelOptions.value.map(option => [option.value, option.primary]))"
             v-model="compareRoleConfig.showDialog.value"
             :entries="compareRoleConfig.entries.value"
             :manual-roles="compareRoleConfig.validManualRoles.value"
@@ -517,6 +422,12 @@
 </template>
 
 <script setup lang="ts">
+import OptimizationControls from '../OptimizationControls.vue'
+import CompareRoleSummary from '../evaluation/CompareRoleSummary.vue'
+import TestWorkspaceToolbar from '../TestWorkspaceToolbar.vue'
+import TestVariantConfig from '../TestVariantConfig.vue'
+import { getTextModelSelectionConfigId, findTextModelSelection } from '../../utils/text-model-selection'
+import { } from '@lucide/vue'
 import OptimizeWorkspaceLayout from '../common/OptimizeWorkspaceLayout.vue'
 import VariantTestWorkspaceLayout from '../common/VariantTestWorkspaceLayout.vue'
 import MobileTestResultHeader from '../common/MobileTestResultHeader.vue'
@@ -554,10 +465,7 @@ import {
     NButton,
     NText,
     NEmpty,
-    NRadioGroup,
-    NRadioButton,
-    NTag,
-} from "naive-ui";
+    } from "naive-ui";
 import PromptPanelUI from "../PromptPanel.vue";
 import PromptPreviewPanel from "../PromptPreviewPanel.vue";
 import ConversationTestPanel from "./ConversationTestPanel.vue";
@@ -566,15 +474,13 @@ import OutputDisplay from "../OutputDisplay.vue";
 import { beginOutputStream } from '../../utils/output-document'
 import SaveTestResultExampleButton from '../SaveTestResultExampleButton.vue'
 import SelectWithConfig from "../SelectWithConfig.vue";
-import TextModelQuickSwitch from "../TextModelQuickSwitch.vue";
+import TextModelSelector from "../TextModelSelector.vue";
 import TestPanelVersionSelect from '../TestPanelVersionSelect.vue'
 import TestSourceLinkedCard from '../TestSourceLinkedCard.vue'
-import TestVariantSourceTag from '../TestVariantSourceTag.vue'
 import ToolCallDisplay from "../ToolCallDisplay.vue";
 import {
     AnalyzeActionIcon,
     CompareHelpButton,
-    CompareRoleBadge,
     CompareRoleConfigDialog,
     EvaluationPanel,
     EvaluationScoreBadge,
@@ -1085,11 +991,11 @@ watch(
         const keys = new Set((opts || []).map((o) => o.value))
 
         const legacy = proMultiSession.selectedTestModelKey
-        const seed = legacy && keys.has(legacy) ? legacy : fallback
+        const seed = legacy && keys.has(getTextModelSelectionConfigId(legacy)) ? legacy : fallback
 
         for (const id of ALL_VARIANT_IDS) {
             const current = variantModelKeyModels[id].value
-            if (!current || !keys.has(current)) {
+            if (!current || !keys.has(getTextModelSelectionConfigId(current))) {
                 proMultiSession.updateTestVariant(id, { modelKey: seed })
             }
         }
@@ -2079,7 +1985,7 @@ defineExpose({
 
 // The mobile shell shares the same prompt, variants and business actions as desktop.
 const mobileVariants = computed(() => activeVariantIds.value.map(id => {
-  const option = (modelSelection.textModelOptions.value).find(item => String(OptionAccessors.getValue(item)) === variantModelKeyModels[id].value)
+  const option = findTextModelSelection(modelSelection.textModelOptions.value, variantModelKeyModels[id].value)
   return {
     id,
     sourceLabel: String(versionOptions.value.find(item => item.value === variantVersionModels[id].value)?.label || ''),
@@ -2094,6 +2000,7 @@ const conversationManagerRef = ref<{ expand: () => void } | null>(null)
 const {
   show: showMobileSource, content: mobileSourceContent, editable: mobileSourceEditable,
   preview: previewMobileSource, edit: editMobileSource,
+  read: readVariantSource,
 } = useTestSourcePreview({
   mode: 'snapshot',
   readSource: (id) => {

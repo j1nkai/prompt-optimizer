@@ -15,7 +15,7 @@
       <div class="image-model-editor-heading">
         <NButton quaternary circle :aria-label="t('common.close')" :disabled="isSaving" @click="close()">
           <template #icon>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
+            <UiChevronLeft aria-hidden="true" :size="20" />
           </template>
         </NButton>
         <span>{{ isEditing ? t('modelManager.editModel') : t('modelManager.addImageModel') }}</span>
@@ -125,27 +125,17 @@
 
           <NFormItem :label="t('image.model.label')">
             <NSpace class="image-model-picker-row" item-class="image-model-picker-item" align="center" style="width: 100%;">
-              <NSelect
-                :ref="modelMenu.selectRef"
-                v-bind="modelMenu.attrs.value"
+              <ModelIdSelector
                 data-testid="image-model-id-select"
                 class="image-model-select"
                 v-model:value="configForm.modelId"
                 :options="modelOptions"
+                :group-label="selectedProvider?.name"
                 :placeholder="t('image.model.placeholder')"
                 :loading="isLoadingModels"
                 :style="isCompact ? { minWidth: 0, width: '100%' } : { flex: 1, minWidth: '300px', maxWidth: '500px' }"
                 clearable
-                filterable
-                :filter="(pattern, option) => {
-                  const label = typeof option.label === 'string' ? option.label : String(option.value)
-                  const value = String(option.value)
-                  return label.toLowerCase().includes(pattern.toLowerCase()) || value.toLowerCase().includes(pattern.toLowerCase())
-                }"
-                tag
-                required
                 @update:value="handleModelChange"
-                @update:show="modelMenu.onUpdateShow"
               />
 
               <ThemedTooltip
@@ -165,11 +155,7 @@
                   style="flex-shrink: 0;"
                 >
                   <template #icon>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
-                      <polyline points="23 4 23 10 17 10"/>
-                      <polyline points="1 20 1 14 7 14"/>
-                      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-                    </svg>
+                    <UiRefreshCw style="width: 14px; height: 14px;" />
                   </template>
                 </NButton>
               </ThemedTooltip>
@@ -241,10 +227,7 @@
             size="small"
           >
             <template #icon>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
+              <UiLink />
             </template>
             {{ t('image.connection.test') }}
           </NButton>
@@ -293,6 +276,8 @@
 </template>
 
 <script setup lang="ts">
+import ModelIdSelector from './ModelIdSelector.vue'
+import { ChevronLeft as UiChevronLeft, RefreshCw as UiRefreshCw, Link as UiLink } from '@lucide/vue'
 import AdaptiveModal from './common/AdaptiveModal.vue'
 import ModelNetworkStatus from './ModelNetworkStatus.vue'
 import { computed, watch, nextTick, h, ref, onBeforeUnmount } from 'vue'
@@ -334,7 +319,6 @@ const props = defineProps<{
   initialConfig?: ImageModelConfig
 }>()
 const providerMenu = useCompactSelectMenu(isCompact, computed(() => props.show))
-const modelMenu = useCompactSelectMenu(isCompact, computed(() => props.show))
 
 // Emits
 const emit = defineEmits<{

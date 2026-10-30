@@ -15,7 +15,7 @@
       <div class="mobile-text-model-heading">
         <NButton quaternary circle :aria-label="t('common.close')" :disabled="isSaving" @click="handleCancel">
           <template #icon>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m14 6-6 6 6 6" /></svg>
+            <UiChevronLeft :size="20" />
           </template>
         </NButton>
         <span :title="modalTitle">{{ isEditing && form.name ? form.name : modalTitle }}</span>
@@ -82,6 +82,7 @@
               <NText depth="3" class="chrome-built-in-status__description">
                 {{ chromeBuiltInStatusDescription }}
               </NText>
+              <a href="https://developer.chrome.com/docs/ai/prompt-api" target="_blank" rel="noopener noreferrer">{{ t('modelManager.localProviderHelp.docs') }}</a>
               <NProgress
                 v-if="chromeBuiltInDownloadPercent !== null"
                 type="line"
@@ -167,13 +168,16 @@
               />
             </template>
             <template v-else-if="field.type === 'string'">
-              <NInput
-                v-model:value="form.connectionConfig[field.name] as string"
-                :type="field.name.toLowerCase().includes('key') ? 'password' : 'text'"
-                :placeholder="field.placeholder"
-                :required="field.required"
-                :autocomplete="field.name.toLowerCase().includes('key') ? 'new-password' : 'on'"
-              />
+              <div class="connection-string-field">
+                <NInput
+                  v-model:value="form.connectionConfig[field.name] as string"
+                  :type="field.name.toLowerCase().includes('key') ? 'password' : 'text'"
+                  :placeholder="field.placeholder"
+                  :required="field.required"
+                  :autocomplete="field.name.toLowerCase().includes('key') ? 'new-password' : 'on'"
+                />
+                <LocalProviderHelp v-if="field.name === 'apiKey'" :key="`${form.providerId}:${form.connectionConfig.localServiceKind ?? ''}`" :provider-id="form.providerId" :service-kind="form.connectionConfig.localServiceKind" />
+              </div>
             </template>
             <template v-else-if="field.type === 'number'">
               <NInputNumber
@@ -199,7 +203,7 @@
                 @click="headersExpanded = !headersExpanded"
               >
                 <span>{{ t('modelManager.customHeaders.label') }}<span v-if="customHeaderRows.length"> ({{ customHeaderRows.length }})</span></span>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" :class="{ 'is-expanded': headersExpanded }"><path d="m9 5 7 7-7 7" /></svg>
+                <UiChevronRight :class="{ 'is-expanded': headersExpanded }" />
               </button>
             </template>
             <div v-show="!isCompact || headersExpanded" id="text-model-custom-headers" class="custom-headers-editor">
@@ -246,26 +250,16 @@
 
           <NFormItem :label="t('modelManager.selectModel')">
             <component :is="isCompact ? 'div' : NSpace" align="center" style="width: 100%;" :class="{ 'mobile-text-model-picker': isCompact }">
-              <NSelect
-                :ref="modelMenu.selectRef"
-                v-bind="modelMenu.attrs.value"
+              <ModelIdSelector
                 data-testid="text-model-id-select"
                 v-model:value="form.modelId"
                 :options="modelOptions"
+                :group-label="manager.selectedProvider.value?.name"
                 :loading="isLoadingModelOptions"
                 :placeholder="t('modelManager.defaultModelPlaceholder')"
                 :style="isCompact ? { minWidth: 0, flex: 1 } : { flex: 1, minWidth: '300px', maxWidth: '500px' }"
                 clearable
-                filterable
-                :filter="(pattern, option) => {
-                  const label = typeof option.label === 'string' ? option.label : String(option.value)
-                  const value = String(option.value)
-                  return label.toLowerCase().includes(pattern.toLowerCase()) || value.toLowerCase().includes(pattern.toLowerCase())
-                }"
-                tag
-                required
                 @update:value="handleModelChange"
-                @update:show="modelMenu.onUpdateShow"
               />
 
               <ThemedTooltip
@@ -285,11 +279,7 @@
                   style="flex-shrink: 0;"
                 >
                   <template #icon>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;">
-                      <polyline points="23 4 23 10 17 10"/>
-                      <polyline points="1 20 1 14 7 14"/>
-                      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-                    </svg>
+                    <UiRefreshCw style="width: 14px; height: 14px;" />
                   </template>
                 </NButton>
               </ThemedTooltip>
@@ -349,10 +339,7 @@
             size="small"
           >
             <template #icon>
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="h-4 w-4">
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-              </svg>
+              <UiLink />
             </template>
             {{ t('modelManager.testConnection') }}
           </NButton>
@@ -373,6 +360,8 @@
 </template>
 
 <script setup lang="ts">
+import ModelIdSelector from './ModelIdSelector.vue'
+import { ChevronLeft as UiChevronLeft, ChevronRight as UiChevronRight, RefreshCw as UiRefreshCw, Link as UiLink } from '@lucide/vue'
 import NModal from "./common/AdaptiveModal.vue"
 import ModelNetworkStatus from './ModelNetworkStatus.vue'
 import { computed, inject, nextTick, h, ref, watch } from 'vue'
@@ -405,6 +394,7 @@ import ModelAdvancedSection from './ModelAdvancedSection.vue'
 import ProviderPillSelect from './ProviderPillSelect.vue'
 import ExternalLinkIcon from './icons/ExternalLinkIcon.vue'
 import ThemedTooltip from './common/ThemedTooltip.vue'
+import LocalProviderHelp from './LocalProviderHelp.vue'
 import type { TextModelManager } from '../composables/model/useTextModelManager'
 import { resolveTextConnectionFieldLabel } from '../utils/model-connection-label'
 import { getProviderDisplayName } from '../utils/provider-display'
@@ -423,7 +413,6 @@ const emit = defineEmits(['update:show', 'saved'])
 const { t } = useI18n()
 const { isCompact } = useWorkspaceLayout()
 const providerMenu = useCompactSelectMenu(isCompact, computed(() => show))
-const modelMenu = useCompactSelectMenu(isCompact, computed(() => show))
 const headersExpanded = ref(false)
 const submitError = ref('')
 const toast = useToast()
@@ -562,6 +551,10 @@ const currentProviderHint = computed(() => {
 
   if (provider.id === 'openai-compatible') {
     return t('modelManager.provider.customApiHint')
+  }
+
+  if (provider.id === 'magpie' || provider.id === 'ollama') {
+    return t(`modelManager.localProviderHelp.${provider.id}Hint`)
   }
 
   if (provider.id === 'openai') {
@@ -750,6 +743,7 @@ const onMobileProviderChange = (providerId: string) => {
 </script>
 
 <style scoped>
+.connection-string-field { width: 100%; min-width: 0; }
 .text-model-identity {
   display: contents;
 }

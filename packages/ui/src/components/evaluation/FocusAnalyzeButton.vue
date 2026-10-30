@@ -140,7 +140,7 @@ import {
   NTooltip,
 } from 'naive-ui'
 import type { EvaluationType } from '@prompt-optimizer/core'
-import { Focus2 } from '@vicons/tabler'
+import { ScanSearch as Focus2 } from '@lucide/vue'
 import FeedbackEditor from './FeedbackEditor.vue'
 import AnalyzeActionIcon from './AnalyzeActionIcon.vue'
 import ThemedTooltip from '../common/ThemedTooltip.vue'
@@ -302,6 +302,14 @@ const handleStart = () => {
 
 .focus-analyze-group--toolbar :deep(.n-button__icon) {
   margin: 0;
+}
+
+@media (min-width: 1024px) {
+  .focus-analyze-group--toolbar :deep(.n-button) {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+  }
 }
 
 .focus-analyze-main:focus-visible,

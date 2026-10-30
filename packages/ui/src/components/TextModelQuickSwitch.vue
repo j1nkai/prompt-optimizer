@@ -27,6 +27,8 @@
           :aria-label="interactiveModelTitle"
           role="button"
           tabindex="0"
+          @keydown.enter.prevent="openPopover"
+          @keydown.space.prevent="openPopover"
         >
           {{ modelLabel }}
         </NTag>
@@ -37,11 +39,13 @@
           <NText depth="2" class="text-model-quick-switch__title">
             {{ t('model.quickSwitch.title') }}
           </NText>
-          <NSelect
+          <ModelIdSelector
             :value="selectedModelId"
             :options="modelOptions"
             :loading="loading"
-            filterable
+            :allow-custom="false"
+            :clearable="false"
+            :scope-text="t('model.selector.sharedScope')"
             size="small"
             :placeholder="t('model.quickSwitch.placeholder')"
             @update:value="handleModelSelect"
@@ -56,9 +60,10 @@
 </template>
 
 <script setup lang="ts">
+import ModelIdSelector from './ModelIdSelector.vue'
 import { computed, inject, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NPopover, NSelect, NSpace, NTag, NText, type SelectOption } from 'naive-ui'
+import { NPopover, NSpace, NTag, NText, type SelectOption } from 'naive-ui'
 import {
   resolveTextModelMetadata,
   type ITextAdapterRegistry,
@@ -185,6 +190,11 @@ const handlePopoverVisibility = (show: boolean) => {
   if (show) {
     void loadModelOptions()
   }
+}
+const openPopover = () => {
+  if (props.disabled) return
+  popoverVisible.value = true
+  handlePopoverVisibility(true)
 }
 
 const buildFallbackModelMeta = (modelId: string, label: string, current: TextModelConfig): TextModel => ({

@@ -59,10 +59,8 @@
                             :title="t('common.expand')"
                         >
                             <template #icon>
-                                <NIcon>
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-                                    </svg>
+                                <NIcon :size="16">
+                                    <UiChevronDown />
                                 </NIcon>
                             </template>
                         </NButton>
@@ -91,29 +89,16 @@
                         @configModel="handleOpenModelManager"
                     >
                         <!-- 模型选择 -->
-                        <template #model-label-extra>
-                            <TextModelQuickSwitch v-if="!isCompact"
-                                :model-key="selectedOptimizeModelKeyModel"
-                                :options="modelSelection.textModelOptions.value"
-                                :refresh-models="modelSelection.refreshTextModels"
-                                :disabled="unwrappedLogicProps.isOptimizing"
-                            />
-                        </template>
+
 
                         <template #model-select>
-                            <SelectWithConfig
+                            <TextModelSelector
                                 v-model="selectedOptimizeModelKeyModel"
                                 data-testid="basic-system-model-select"
                                 :options="modelSelection.textModelOptions"
-                                :getPrimary="OptionAccessors.getPrimary"
-                                :getSecondary="OptionAccessors.getSecondary"
-                                :getValue="OptionAccessors.getValue"
                                 :placeholder="t('model.select.placeholder')"
                                 size="medium"
                                 :disabled="unwrappedLogicProps.isOptimizing"
-                                filterable
-                                :show-config-action="true"
-                                :show-empty-config-c-t-a="true"
                                 @focus="modelSelection.refreshTextModels"
                                 @config="handleOpenModelManager"
                             />
@@ -149,10 +134,8 @@
                                 :title="t('common.collapse')"
                             >
                                 <template #icon>
-                                    <NIcon>
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
-                                        </svg>
+                                    <NIcon :size="16">
+                                        <UiChevronUp />
                                     </NIcon>
                                 </template>
                             </NButton>
@@ -247,124 +230,83 @@
                     </template>
                     <template #global-controls>
                     <!-- 顶部：列数与全局操作 -->
-                    <NCard size="small" class="test-global-controls" :style="{ flexShrink: 0 }">
-                        <div class="test-area-top">
-
-                            <NFlex class="test-group-count" align="center" :size="8" :wrap="false" style="min-width: 0;">
-                                <NText :depth="2" class="test-area-label">
-                                    {{ t('workspace.testGroups') }}：
-                                </NText>
-                                <NRadioGroup
-                                    v-model:value="testColumnCountModel"
-                                    size="small"
-                                    :disabled="isAnyVariantRunning"
-                                >
-                                    <NRadioButton :value="2">2</NRadioButton>
-                                    <NRadioButton :value="3">3</NRadioButton>
-                                    <NRadioButton :value="4" :disabled="!canUseFourColumns">4</NRadioButton>
-                                </NRadioGroup>
-                            </NFlex>
-
-                            <NFlex v-if="!isCompact" align="center" justify="end" :size="8" :wrap="false">
-                                <NButton
-                                    type="primary"
-                                    size="small"
-                                    :loading="isAnyVariantRunning"
-                                    :disabled="isAnyVariantRunning"
-                                    @click="runAllVariants"
-                                    :data-testid="'basic-system-test-run-all'"
-                                >
-                                    {{ t('test.layout.runAll') }}
-                                </NButton>
-
-                                <template v-if="!isCompact && (hasCompareCandidates || hasCompareEvaluation)">
-                                    <EvaluationScoreBadge
-                                        v-if="hasCompareEvaluation || isEvaluatingCompare"
-                                        :score="compareScore"
-                                        :level="compareScoreLevel"
-                                        :loading="isEvaluatingCompare"
-                                        :result="compareEvaluationResult"
-                                        type="compare"
-                                        :stale="isCompareEvaluationStale"
-                                        :stale-message="t('evaluation.stale.compare')"
-                                        :disable-evaluate="!canEvaluateCompare"
-                                        :disable-evaluate-reason="compareDisabledReason"
-                                        size="small"
-                                        @show-detail="() => showDetail('compare')"
-                                        @evaluate="() => handleEvaluate('compare')"
-                                        @evaluate-with-feedback="handleEvaluateWithFeedback"
-                                        @apply-improvement="handleApplyImprovement"
-                                        @apply-patch="handleApplyPatch"
-                                    />
-                                    <FocusAnalyzeButton
-                                        v-else
-                                        type="compare"
-                                        :label="t('evaluation.compareEvaluate')"
-                                        :disabled="!canEvaluateCompare"
-                                        :disabled-reason="compareDisabledReason"
-                                        :loading="isEvaluatingCompare"
-                                        :button-props="{ size: 'small', type: 'tertiary' }"
-                                        @evaluate="() => handleEvaluate('compare')"
-                                        @evaluate-with-feedback="handleEvaluateWithFeedback"
-                                    >
-                                        <template #icon>
-                                            <AnalyzeActionIcon />
-                                        </template>
-                                    </FocusAnalyzeButton>
-                                </template>
-                                <CompareHelpButton v-if="!isCompact && activeVariantIds.length >= 2" />
-                                <NTag
-                                    v-if="!isCompact && compareToolbarStatus"
-                                    size="small"
-                                    :type="compareToolbarStatus.type"
-                                    :bordered="false"
-                                >
-                                    {{ compareToolbarStatus.label }}
-                                </NTag>
-                            </NFlex>
-                        </div>
-                    </NCard>
+                    <TestWorkspaceToolbar v-model:count="testColumnCountModel"
+                      :compact="isCompact" :running="isAnyVariantRunning" :can-use-four-columns="canUseFourColumns"
+                      run-test-id="basic-system-test-run-all"
+                      @run="runAllVariants">
+                      <template #comparison>
+                        <CompareRoleSummary :entries="compareRoleConfig.entries.value"
+                          :warning="compareToolbarStatus?.label" :disabled="isAnyVariantRunning" @click="openCompareRoleConfig" />
+                      </template>
+                      <template #evaluation>
+                        <template v-if="!isCompact && (hasCompareCandidates || hasCompareEvaluation)">
+                          <EvaluationScoreBadge
+                            v-if="hasCompareEvaluation || isEvaluatingCompare"
+                            :score="compareScore"
+                            :level="compareScoreLevel"
+                            :loading="isEvaluatingCompare"
+                            :result="compareEvaluationResult"
+                            type="compare"
+                            :stale="isCompareEvaluationStale"
+                            :stale-message="t('evaluation.stale.compare')"
+                            :disable-evaluate="!canEvaluateCompare"
+                            :disable-evaluate-reason="compareDisabledReason"
+                            size="small"
+                            @show-detail="() => showDetail('compare')"
+                            @evaluate="() => handleEvaluate('compare')"
+                            @evaluate-with-feedback="handleEvaluateWithFeedback"
+                            @apply-improvement="handleApplyImprovement"
+                            @apply-patch="handleApplyPatch"
+                          />
+                          <FocusAnalyzeButton
+                            v-else
+                            type="compare"
+                            :label="t('evaluation.compareEvaluate')"
+                            :disabled="!canEvaluateCompare"
+                            :disabled-reason="compareDisabledReason"
+                            :loading="isEvaluatingCompare"
+                            :button-props="{ size: 'small', type: 'tertiary' }"
+                            @evaluate="() => handleEvaluate('compare')"
+                            @evaluate-with-feedback="handleEvaluateWithFeedback"
+                          >
+                            <template #icon>
+                              <AnalyzeActionIcon />
+                            </template>
+                          </FocusAnalyzeButton>
+                        </template>
+                        <CompareHelpButton v-if="!isCompact && activeVariantIds.length >= 2" />
+                      </template>
+                    </TestWorkspaceToolbar>
 
                     </template>
                     <!-- 桌面配置与结果列对齐；移动端配置紧凑排列，结果同时展示。 -->
                     <template #variant-controls>
-                    <NCard size="small" class="test-variant-controls" :style="{ flexShrink: 0 }">
+                    <NCard size="small" class="test-variant-controls" :style="{ flexShrink: 0 }" :content-style="isCompact ? undefined : { padding: '12px' }">
                         <div class="variant-deck" :style="{ gridTemplateColumns: testGridTemplateColumns }">
                             <div v-for="id in activeVariantIds" :key="id"  class="variant-cell">
-                                <div
+                                <TestVariantConfig :preview-source="() => readVariantSource(id)" v-if="!isCompact"
+                                  :label="getVariantLabel(id)" :version="variantVersionModels[id].value" :version-options="versionOptions"
+                                  :model-key="variantModelKeyModels[id].value" :options="modelSelection.textModelOptions.value" :refresh-models="modelSelection.refreshTextModels"
+                                  :running="variantRunning[id]" :disabled="isAnyVariantRunning"
+                                  :run-disabled="isAnyVariantRunning && !variantRunning[id]"
+                                  :feedback-tone="variantSourceFeedback[id].tone" :feedback-key="variantSourceFeedback[id].key"
+                                  :version-test-id="getVariantVersionTestId(id)" :model-test-id="getVariantModelTestId(id)" :run-test-id="getVariantRunTestId(id)"
+                                  @update:version="handleVariantVersionChange(id, $event)"
+                                  @update:model-key="variantModelKeyModels[id].value = $event"
+                                  @preview="openSourcePreview(id)" @run="runVariant(id)" @config="handleOpenModelManager">
+
+                                </TestVariantConfig>
+                                <div v-else
                                     class="variant-cell__controls"
                                     :class="{ 'variant-cell__controls--stacked': useStackedVariantControls }"
                                 >
-                                    <div v-if="!isCompact" class="variant-cell__meta">
-                                        <TestVariantSourceTag
-                                            class="variant-cell__label"
-                                            :variant-label="getVariantLabel(id)"
-                                            :selection="variantVersionModels[id].value"
-                                            :resolved-version="getVariantResolvedVersion(id)"
-                                            :labels="getTestPanelVersionLabels()"
-                                            :feedback-key="variantSourceFeedback[id].key"
-                                            :feedback-tone="variantSourceFeedback[id].tone"
-                                            @activate="previewVariantSource(id)"
-                                        />
-                                        <CompareRoleBadge
-                                            v-if="!isCompact && activeVariantIds.length >= 2"
-                                            :entry="compareRoleEntryMap[id]"
-                                            clickable
-                                            @click="openCompareRoleConfig"
-                                        />
-                                        <TextModelQuickSwitch v-if="!isCompact"
-                                            :model-key="variantModelKeyModels[id].value"
-                                            :options="modelSelection.textModelOptions.value"
-                                            :refresh-models="modelSelection.refreshTextModels"
-                                            :disabled="variantRunning[id] || isAnyVariantRunning"
-                                        />
-                                    </div>
+
 
                                     <div class="variant-cell__actions">
                                         <button v-if="isCompact" type="button" class="test-config-group-label" :aria-label="t('workspace.viewPrompt') + ' ' + id.toUpperCase()" @click="previewVariantSource(id)">{{ id.toUpperCase() }}</button>
                                         <div class="variant-cell__version">
                                         <NText v-if="isCompact" depth="2" class="test-settings-label">{{ t('workspace.promptVersion') }}</NText>
-                                        <TestPanelVersionSelect
+                                        <TestPanelVersionSelect :preview-source="() => readVariantSource(id)" @preview="openSourcePreview(id)"
                                             :value="variantVersionModels[id].value"
                                             :options="versionOptions"
                                             :disabled="variantRunning[id] || isAnyVariantRunning"
@@ -374,46 +316,21 @@
                                         </div>
                                         <div class="variant-cell__model">
                                             <NText v-if="isCompact" depth="2" class="test-settings-label">{{ t('test.model') }}</NText>
-                                            <SelectWithConfig
+                                            <TextModelSelector scope="column"
                                                 :data-testid="getVariantModelTestId(id)"
                                                 :model-value="variantModelKeyModels[id].value"
                                                 @update:model-value="(value) => { variantModelKeyModels[id].value = String(value ?? '') }"
                                                 :options="modelSelection.textModelOptions"
-                                                :getPrimary="OptionAccessors.getPrimary"
-                                                :getSecondary="OptionAccessors.getSecondary"
-                                                :getValue="OptionAccessors.getValue"
                                                 :placeholder="t('model.select.placeholder')"
                                                 size="medium"
                                                 :disabled="variantRunning[id] || isAnyVariantRunning"
-                                                filterable
-                                                :show-config-action="true"
-                                                :show-empty-config-c-t-a="true"
                                                 @focus="modelSelection.refreshTextModels"
                                                 @config="handleOpenModelManager"
                                                 style="min-width: 0; width: 100%;"
                                             />
                                         </div>
 
-                                        <div v-if="!isCompact" class="variant-cell__run">
-                                            <ThemedTooltip :label="t('test.layout.runThisColumn')">
-                                                <NButton
-                                                    type="primary"
-                                                    size="small"
-                                                    circle
-                                                    :loading="variantRunning[id]"
-                                                    :disabled="isAnyVariantRunning && !variantRunning[id]"
-                                                    @click="() => runVariant(id)"
-                                                    :data-testid="getVariantRunTestId(id)"
-                                                    :aria-label="t('test.layout.runThisColumn')"
-                                                >
-                                                    <template #icon>
-                                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                                                            <path d="M8 5v14l11-7z" />
-                                                        </svg>
-                                                    </template>
-                                                </NButton>
-                                            </ThemedTooltip>
-                                        </div>
+
                                     </div>
                                 </div>
                             </div>
@@ -552,6 +469,7 @@
             @retry="handleReEvaluateActive"
         />
         <CompareRoleConfigDialog
+            :model-labels="Object.fromEntries(modelSelection.textModelOptions.value.map(option => [option.value, option.primary]))"
             v-model="compareRoleConfig.showDialog.value"
             :entries="compareRoleConfig.entries.value"
             :manual-roles="compareRoleConfig.validManualRoles.value"
@@ -562,6 +480,11 @@
 </template>
 
 <script setup lang="ts">
+import CompareRoleSummary from '../evaluation/CompareRoleSummary.vue'
+import TestWorkspaceToolbar from '../TestWorkspaceToolbar.vue'
+import TestVariantConfig from '../TestVariantConfig.vue'
+import { getTextModelSelectionConfigId } from '../../utils/text-model-selection'
+import { ChevronDown as UiChevronDown, ChevronUp as UiChevronUp, } from '@lucide/vue'
 import TestSourcePreview from '../common/TestSourcePreview.vue'
 import TestWorkspaceLayout from '../common/TestWorkspaceLayout.vue'
 import MobileTestResultHeader from '../common/MobileTestResultHeader.vue'
@@ -605,7 +528,7 @@ import { useWorkspaceTemplateSelection } from '../../composables/workspaces/useW
 import { useEvaluationHandler } from '../../composables/prompt/useEvaluationHandler'
 import { buildCompareEvaluationPayload, useCompareRoleConfig, useTestSourceAreaFeedback, useTestVariantSourceFeedback } from '../../composables/prompt'
 import { provideEvaluation } from '../../composables/prompt/useEvaluationContext'
-import { NButton, NCard, NFlex, NIcon, NText, NRadioGroup, NRadioButton, NTag } from 'naive-ui'
+import { NButton, NCard, NFlex, NIcon, NText } from 'naive-ui'
 import InputPanelUI from '../InputPanel.vue'
 import PromptPanelUI from '../PromptPanel.vue'
 import WorkspaceUtilityMenu from '../common/WorkspaceUtilityMenu.vue'
@@ -619,7 +542,6 @@ import SaveTestResultExampleButton from '../SaveTestResultExampleButton.vue'
 import {
   AnalyzeActionIcon,
   CompareHelpButton,
-  CompareRoleBadge,
   CompareRoleConfigDialog,
   EvaluationPanel,
   EvaluationScoreBadge,
@@ -627,10 +549,9 @@ import {
 } from '../evaluation'
 import { buildCompareToolbarStatus } from '../evaluation/compare-ui'
 import SelectWithConfig from '../SelectWithConfig.vue'
-import TextModelQuickSwitch from '../TextModelQuickSwitch.vue'
+import TextModelSelector from '../TextModelSelector.vue'
 import TestPanelVersionSelect from '../TestPanelVersionSelect.vue'
 import TestSourceLinkedCard from '../TestSourceLinkedCard.vue'
-import TestVariantSourceTag from '../TestVariantSourceTag.vue'
 import { OptionAccessors } from '../../utils/data-transformer'
 import {
   buildTestPanelVersionPromptRef,
@@ -863,11 +784,11 @@ watch(
     const keys = new Set((opts || []).map(o => o.value))
 
     const legacy = logic.selectedTestModelKey.value
-    const seed = legacy && keys.has(legacy) ? legacy : fallback
+    const seed = legacy && keys.has(getTextModelSelectionConfigId(legacy)) ? legacy : fallback
 
     for (const id of ALL_VARIANT_IDS) {
       const current = variantModelKeyModels[id].value
-      if (!current || !keys.has(current)) {
+      if (!current || !keys.has(getTextModelSelectionConfigId(current))) {
         session.updateTestVariant(id, { modelKey: seed })
       }
     }
@@ -943,13 +864,14 @@ const {
   show: sourcePreviewOpen, selectedId: sourcePreviewId,
   content: sourcePreviewContent, title: sourcePreviewTitle, editable: sourcePreviewEditable,
   preview: openSourcePreview, edit: editPreviewSource,
+  read: readVariantSource,
 } = useTestSourcePreview({
   mode: 'live',
   readSource: (id) => {
     const selection = variantVersionModels[id].value
     return {
       content: resolveTestPrompt(selection).text,
-      title: `${t('workspace.viewPrompt')} · ${getVariantLabel(id)} · ${getVariantVersionLabel(id)}`,
+      title: `${t('workspace.viewPrompt')} · ${getVariantLabel(id)} · ${selection === 0 ? t('promptOptimizer.originalPrompt') : selection === 'workspace' ? t('workspace.optimizeWorkspace') : getVariantVersionLabel(id)}`,
       editable: [0, 'workspace'].includes(selection),
       view: selection === 0 ? 'original' : 'workspace',
     }
@@ -961,7 +883,7 @@ const {
   },
 })
 const previewVariantSource = (id: TestVariantId) => {
-  if (!isCompact.value) { activateVariantSource(id); return }
+  if (!isCompact.value) activateVariantSource(id)
   openSourcePreview(id)
 }
 

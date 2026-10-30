@@ -23,19 +23,7 @@
                         >
                             <template #icon>
                                 <NIcon :size="16">
-                                    <svg
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                    >
-                                        <path
-                                            stroke-linecap="round"
-                                            stroke-linejoin="round"
-                                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                        />
-                                    </svg>
+                                    <UiCircleHelp />
                                 </NIcon>
                             </template>
                         </NButton>
@@ -60,10 +48,8 @@
                     round
                 >
                     <template #icon>
-                        <NIcon>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
-                            </svg>
+                        <NIcon :size="16">
+                            <UiMessageSquareText />
                         </NIcon>
                     </template>
                     <template v-if="!compact">{{ extracting ? $t('evaluation.variableExtraction.extracting') : $t('evaluation.variableExtraction.extractButton') }}</template>
@@ -79,25 +65,8 @@
                     round
                 >
                     <template #icon>
-                        <NIcon>
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                stroke-width="2"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                />
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                />
-                            </svg>
+                        <NIcon :size="16">
+                            <UiEye />
                         </NIcon>
                     </template>
                 </NButton>
@@ -111,20 +80,8 @@
                     round
                 >
                     <template #icon>
-                        <NIcon>
-                            <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                                stroke-width="2"
-                            >
-                                <path
-                                    stroke-linecap="round"
-                                    stroke-linejoin="round"
-                                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                                />
-                            </svg>
+                        <NIcon :size="16">
+                            <UiMaximize2 />
                         </NIcon>
                     </template>
                 </NButton>
@@ -170,51 +127,12 @@
         />
 
         <!-- 控制面板 -->
-        <NGrid class="input-panel-controls" :cols="24" :x-gap="8" responsive="screen">
-            <!-- 模型选择 -->
-            <NGridItem class="input-panel-control" :span="6" :xs="24" :sm="6">
-                <NSpace class="input-panel-field" item-class="input-panel-field-item" vertical :size="8">
-                    <NFlex align="center" :size="6" :wrap="false" class="input-panel-label-row">
-                        <NText
-                            class="input-panel-label"
-                            :depth="2"
-                            style="font-size: 14px; font-weight: 500; flex-shrink: 0;"
-                            >{{ modelLabel }}</NText
-                        >
-                        <slot name="model-label-extra"></slot>
-                    </NFlex>
-                    <slot name="model-select"></slot>
-                </NSpace>
-            </NGridItem>
-
-            <!-- 提示词模板选择 -->
-            <NGridItem class="input-panel-control" v-if="templateLabel" :span="11" :xs="24" :sm="11">
-                <NSpace class="input-panel-field" item-class="input-panel-field-item" vertical :size="8">
-                    <NText
-                        class="input-panel-label"
-                        :depth="2"
-                        style="font-size: 14px; font-weight: 500"
-                        >{{ templateLabel }}</NText
-                    >
-                    <slot name="template-select"></slot>
-                </NSpace>
-            </NGridItem>
-
-            <!-- 控制按钮组 -->
-            <NGridItem
-                class="input-panel-control input-panel-secondary-actions"
-                :span="templateLabel ? 2 : 13"
-                :xs="24"
-                :sm="templateLabel ? 2 : 13"
-            >
-                <NSpace class="input-panel-field" item-class="input-panel-field-item" vertical :size="8" align="end">
-                    <slot name="control-buttons"></slot>
-                </NSpace>
-            </NGridItem>
-
-            <!-- 提交按钮区域 -->
-            <NGridItem :span="5" :xs="24" :sm="5" class="input-panel-control input-panel-submit flex items-end">
-                <NSpace class="input-panel-submit-actions" item-class="input-panel-submit-item" :size="8" justify="end" style="width: 100%">
+        <OptimizationControls :compact="compact" :model-label="modelLabel" :template-label="templateLabel">
+          <template #model><slot name="model-select" /></template>
+          <template #model-label-extra><slot name="model-label-extra" /></template>
+          <template v-if="templateLabel" #template><slot name="template-select" /></template>
+          <template v-if="$slots['control-buttons']" #extra><slot name="control-buttons" /></template>
+          <template #actions>
                     <!-- 分析按钮（与优化同级） -->
                     <NButton
                         v-if="showAnalyzeButton"
@@ -240,9 +158,8 @@
                     >
                         {{ compact ? buttonText : loading ? loadingText : buttonText }}
                     </NButton>
-                </NSpace>
-            </NGridItem>
-        </NGrid>
+                </template>
+        </OptimizationControls>
     </NSpace>
 
     <!-- 全屏弹窗 -->
@@ -260,6 +177,8 @@
 </template>
 
 <script setup lang="ts">
+import OptimizationControls from './OptimizationControls.vue'
+import { CircleHelp as UiCircleHelp, MessageSquareText as UiMessageSquareText, Eye as UiEye, Maximize2 as UiMaximize2 } from '@lucide/vue'
 import { computed } from 'vue'
 import { useWorkspaceLayout } from '../composables/ui/useWorkspaceLayout'
 const { compactInputRows } = useWorkspaceLayout()
@@ -270,8 +189,6 @@ import {
     NText,
     NSpace,
     NFlex,
-    NGrid,
-    NGridItem,
     NIcon,
     NPopover,
 } from "naive-ui";
