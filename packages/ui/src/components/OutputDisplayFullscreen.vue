@@ -1,11 +1,12 @@
 <template>
-  <FullscreenDialog v-model="internalVisible" :title="title || t('common.content')">
+  <FullscreenDialog v-model="internalVisible" :title="title || t('common.content')" size="medium">
     <NFlex vertical :wrap="false" class="output-fullscreen-layout" style="flex: 1; min-height: 0; overflow: hidden;">
       <NFlex vertical :wrap="false" style="flex: 1; min-height: 0; overflow: hidden;">
         <OutputDisplayCore
             v-if="internalVisible"
             ref="coreDisplayRef"
             :initial-view-mode="initialViewMode"
+            expand-preview
             test-id="output-fullscreen"
             :content="internalContent"
             :output-record="outputRecord"
@@ -18,6 +19,7 @@
             :placeholder="placeholder"
             :loading="loading"
             :streaming="streaming"
+    :enable-stop="enableStop"
             :compareService="compareService"
             @update:content="handleContentUpdate"
             @copy="handleCopy"
@@ -60,6 +62,7 @@ interface Props {
   mode: 'readonly' | 'editable'
   reasoningMode?: 'show' | 'hide' | 'auto'
   enabledActions?: ('fullscreen' | 'diff' | 'copy' | 'edit' | 'reasoning' | 'favorite')[]
+  enableStop?: boolean
   streaming?: boolean
   loading?: boolean
   placeholder?: string
